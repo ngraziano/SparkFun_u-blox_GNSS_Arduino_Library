@@ -695,26 +695,7 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX,
         lastCheck = millis(); // Put off checking to avoid I2C bus traffic
         return false;
       }
-      // if (msb == 0xFF)
-      // {
-      //   //I believe this is a u-blox bug. Device should never present
-      //   an 0xFF. if ((isDebugDetailed()) || (_printLimitedDebug ==
-      //   true)) // This is important. Print this if doing limited
-      //   debugging
-      //   {
-      //     _debugSerial->print(F("checkUbloxI2C: u-blox bug? Length msb
-      //     is 0xFF. i2cPollingWait is "));
-      //     _debugSerial->println(i2cPollingWait);
-      //   }
-      //   if (debugPin >= 0)
-      //   {
-      //     digitalWrite((uint8_t)debugPin, LOW);
-      //     delay(10);
-      //     digitalWrite((uint8_t)debugPin, HIGH);
-      //   }
-      //   lastCheck = millis(); //Put off checking to avoid I2C bus
-      //   traffic return false;
-      // }
+
       bytesAvailable = (uint16_t)msb << 8 | lsb;
     }
 
@@ -3183,7 +3164,7 @@ void SFE_UBLOX_GNSS::sendSpiCommand(ubxPacket *outgoingUBX) {
   spiTransfer(outgoingUBX->len >> 8);
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("sendSpiCommand: "));
     _debugSerial->print(UBX_SYNCH_1, HEX);
     _debugSerial->print(F(" "));
@@ -3203,7 +3184,7 @@ void SFE_UBLOX_GNSS::sendSpiCommand(ubxPacket *outgoingUBX) {
   for (uint16_t i = 0; i < outgoingUBX->len; i++) {
     spiTransfer(outgoingUBX->payload[i]);
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug) {
+    if (isDebugDetailed()) {
       _debugSerial->print(F(" "));
       _debugSerial->print(outgoingUBX->payload[i], HEX);
     }
@@ -3217,7 +3198,7 @@ void SFE_UBLOX_GNSS::sendSpiCommand(ubxPacket *outgoingUBX) {
   _spiPort->endTransaction();
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F(" "));
     _debugSerial->print(outgoingUBX->checksumA, HEX);
     _debugSerial->print(F(" "));
@@ -5277,8 +5258,7 @@ uint8_t SFE_UBLOX_GNSS::getPowerSaveMode(uint16_t maxWait) {
   }
   */
   if (protVer >= 27) {
-    if ((isDebugDetailed()) ||
-if (isDebugLimited()) 
+    if ((isDebugLimited())
     {
       _debugSerial->println(F("powerSaveMode (UBX-CFG-RXM) is not supported by "
                               "this protocol version"));
@@ -6318,8 +6298,9 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVPOSECEF() {
   packetUBXNAVPOSECEF =
       new UBX_NAV_POSECEF_t; // Allocate RAM for the main struct
   if (!packetUBXNAVPOSECEF) {
-if (isDebugLimited()) {
-      _debugSerial->println(F("initPacketUBXNAVPOSECEF: RAM alloc failed!"));}
+    if (isDebugLimited()) {
+      _debugSerial->println(F("initPacketUBXNAVPOSECEF: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVPOSECEF->automaticFlags.flags.all = 0;
@@ -6493,8 +6474,9 @@ bool SFE_UBLOX_GNSS::assumeAutoNAVSTATUS(bool enabled, bool implicitUpdate) {
 bool SFE_UBLOX_GNSS::initPacketUBXNAVSTATUS() {
   packetUBXNAVSTATUS = new UBX_NAV_STATUS_t; // Allocate RAM for the main struct
   if (!packetUBXNAVSTATUS) {
-if (isDebugLimited()) {
-      _debugSerial->println(F("initPacketUBXNAVSTATUS: RAM alloc failed!"));}
+    if (isDebugLimited()) {
+      _debugSerial->println(F("initPacketUBXNAVSTATUS: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVSTATUS->automaticFlags.flags.all = 0;
@@ -7333,8 +7315,9 @@ bool SFE_UBLOX_GNSS::setAutoNAVVELECEFcallback(
   }
 
   if (!packetUBXNAVVELECEF->callbackData) {
-if (isDebugLimited()) {
-      _debugSerial->println(F("setAutoNAVVELECEFcallback: RAM alloc failed!"));}
+    if (isDebugLimited()) {
+      _debugSerial->println(F("setAutoNAVVELECEFcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -8043,8 +8026,9 @@ bool SFE_UBLOX_GNSS::setAutoNAVCLOCKcallback(
   }
 
   if (!packetUBXNAVCLOCK->callbackData) {
-if (isDebugLimited()) {
-      _debugSerial->println(F("setAutoNAVCLOCKcallback: RAM alloc failed!"));}
+    if (isDebugLimited()) {
+      _debugSerial->println(F("setAutoNAVCLOCKcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
