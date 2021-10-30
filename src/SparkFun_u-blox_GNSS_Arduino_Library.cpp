@@ -5258,7 +5258,7 @@ uint8_t SFE_UBLOX_GNSS::getPowerSaveMode(uint16_t maxWait) {
   }
   */
   if (protVer >= 27) {
-    if ((isDebugLimited())
+    if (isDebugLimited())
     {
       _debugSerial->println(F("powerSaveMode (UBX-CFG-RXM) is not supported by "
                               "this protocol version"));
