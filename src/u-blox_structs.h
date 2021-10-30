@@ -1098,7 +1098,7 @@ typedef struct
 {
 	ubxAutomaticFlags automaticFlags;
   UBX_RXM_SFRBX_data_t data;
-  boolean moduleQueried;
+  bool moduleQueried;
   void (*callbackPointer)(UBX_RXM_SFRBX_data_t);
   UBX_RXM_SFRBX_data_t  *callbackData;
 } UBX_RXM_SFRBX_t;
@@ -1165,7 +1165,7 @@ typedef struct
 {
 	ubxAutomaticFlags automaticFlags;
   UBX_RXM_RAWX_data_t data;
-  boolean moduleQueried;
+  bool moduleQueried;
   void (*callbackPointer)(UBX_RXM_RAWX_data_t);
   UBX_RXM_RAWX_data_t  *callbackData;
 } UBX_RXM_RAWX_t;
