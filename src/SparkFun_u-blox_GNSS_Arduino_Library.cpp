@@ -535,8 +535,8 @@ bool SFE_UBLOX_GNSS::isConnected(uint16_t maxWait) {
 // Assistant to see what they're doing that we're not
 void SFE_UBLOX_GNSS::enableDebugging(Stream &debugPort,
                                      bool printLimitedDebug) {
-  _debugSerial =
-      &debugPort; // Grab which port the user wants us to use for debugging
+  // Grab which port the user wants us to use for debugging
+  _debugSerial = &debugPort;
 
   if (!printLimitedDebug) {
     // Should we print the commands we send? Good for debugging
@@ -3317,24 +3317,15 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForACKResponse(ubxPacket *outgoingUBX,
                                                       uint8_t requestedClass,
                                                       uint8_t requestedID,
                                                       uint16_t maxTime) {
-  outgoingUBX->valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go
-                                                              // VALID (or
-                                                              // NOT_VALID) when
-                                                              // we receive a
-                                                              // response to the
-                                                              // packet we sent
+  // This will go VALID (or NOT_VALID) when we receive a response to the packet
+  // we sent
+  outgoingUBX->valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetAck.valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetBuf.valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetAuto.valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
-  outgoingUBX->classAndIDmatch =
-      SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go
-                                             // VALID (or
-                                             // NOT_VALID) when
-                                             // we receive a
-                                             // packet that
-                                             // matches the
-                                             // requested class
-                                             // and ID
+  // This will go  VALID (or NOT_VALID) when we receive a packet that matches
+  // the requested class and ID
+  outgoingUBX->classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetAck.classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetBuf.classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetAuto.classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
@@ -3364,9 +3355,8 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForACKResponse(ubxPacket *outgoingUBX,
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (SFE_UBLOX_STATUS_DATA_RECEIVED); // We received
-                                                 // valid data and a
-                                                 // correct ACK!
+        // We received valid data and a correct ACK!
+        return (SFE_UBLOX_STATUS_DATA_RECEIVED);
       }
 
       // We can be confident that the data packet (if we are
@@ -3416,11 +3406,8 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForACKResponse(ubxPacket *outgoingUBX,
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (SFE_UBLOX_STATUS_DATA_OVERWRITTEN); // Data was
-                                                    // valid but has
-                                                    // been or is
-                                                    // being
-                                                    // overwritten
+        // Data was valid but has been or is being overwritten
+        return (SFE_UBLOX_STATUS_DATA_OVERWRITTEN);
       }
 
       // If packetAck.classAndIDmatch is VALID but both
@@ -3707,355 +3694,52 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForNoACKResponse(ubxPacket *outgoingUBX,
   return (SFE_UBLOX_STATUS_TIMEOUT);
 }
 
+template <class T> tryCallBack(T *ds) {
+  // If RAM has been allocated for message storage
+  // If RAM has been allocated for the copy of the data
+  // If the pointer to the callback has been defined
+  // If the copy of the data is valid
+  if (ds && ds->callbackData && ds->callbackPointer &&
+      ds->automaticFlags.flag.bits.callbackCopyValid) {
+    ds->callbackPointer(*ds->callbackData);
+    // Mark the data as stale
+    ds->automaticFlags.flag.bits.callbackCopyValid = false;
+  }
+}
+
 // Check if any callbacks are waiting to be processed
 void SFE_UBLOX_GNSS::checkCallbacks(void) {
-  if (checkCallbacksReentrant ==
-      true) // Check for reentry (i.e. checkCallbacks has been
-            // called from inside a callback)
+  // Check for reentry (i.e. checkCallbacks has been called from inside a
+  // callback)
+  if (checkCallbacksReentrant)
     return;
 
   checkCallbacksReentrant = true;
 
-  if ((packetUBXNAVPOSECEF !=
-       NULL) // If RAM has been allocated for message storage
-      &&
-      (packetUBXNAVPOSECEF->callbackData != NULL) // If RAM has been allocated
-                                                  // for the copy of the data
-      && (packetUBXNAVPOSECEF->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVPOSECEF->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-
-    packetUBXNAVPOSECEF->callbackPointer(
-        *packetUBXNAVPOSECEF->callbackData); // Call the callback
-    packetUBXNAVPOSECEF->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVSTATUS !=
-       NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVSTATUS->callbackData != NULL) // If RAM has been allocated
-                                                    // for the copy of the data
-      && (packetUBXNAVSTATUS->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVSTATUS->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVSTATUS->callbackPointer(
-        *packetUBXNAVSTATUS->callbackData); // Call the callback
-    packetUBXNAVSTATUS->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVDOP != NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVDOP->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXNAVDOP->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVDOP->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVDOP->callbackPointer(
-        *packetUBXNAVDOP->callbackData); // Call the callback
-    packetUBXNAVDOP->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVATT != NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVATT->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXNAVATT->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVATT->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVATT->callbackPointer(
-        *packetUBXNAVATT->callbackData); // Call the callback
-    packetUBXNAVATT->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVPVT != NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVPVT->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXNAVPVT->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVPVT->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVPVT->callbackPointer(
-        *packetUBXNAVPVT->callbackData); // Call the callback
-    packetUBXNAVPVT->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVODO != NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVODO->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXNAVODO->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVODO->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVODO->callbackPointer(
-        *packetUBXNAVODO->callbackData); // Call the callback
-    packetUBXNAVODO->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVVELECEF !=
-       NULL) // If RAM has been allocated for message storage
-      &&
-      (packetUBXNAVVELECEF->callbackData != NULL) // If RAM has been allocated
-                                                  // for the copy of the data
-      && (packetUBXNAVVELECEF->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVVELECEF->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVVELECEF->callbackPointer(
-        *packetUBXNAVVELECEF->callbackData); // Call the callback
-    packetUBXNAVVELECEF->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVVELNED !=
-       NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVVELNED->callbackData != NULL) // If RAM has been allocated
-                                                    // for the copy of the data
-      && (packetUBXNAVVELNED->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVVELNED->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVVELNED->callbackPointer(
-        *packetUBXNAVVELNED->callbackData); // Call the callback
-    packetUBXNAVVELNED->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVHPPOSECEF !=
-       NULL) // If RAM has been allocated for message storage
-      &&
-      (packetUBXNAVHPPOSECEF->callbackData != NULL) // If RAM has been allocated
-                                                    // for the copy of the data
-      && (packetUBXNAVHPPOSECEF->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVHPPOSECEF->callbackPointer(
-        *packetUBXNAVHPPOSECEF->callbackData); // Call the callback
-    packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVHPPOSLLH !=
-       NULL) // If RAM has been allocated for message storage
-      &&
-      (packetUBXNAVHPPOSLLH->callbackData != NULL) // If RAM has been allocated
-                                                   // for the copy of the data
-      && (packetUBXNAVHPPOSLLH->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVHPPOSLLH->callbackPointer(
-        *packetUBXNAVHPPOSLLH->callbackData); // Call the callback
-    packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVCLOCK !=
-       NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVCLOCK->callbackData != NULL) // If RAM has been allocated
-                                                   // for the copy of the data
-      && (packetUBXNAVCLOCK->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVCLOCK->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVCLOCK->callbackPointer(
-        *packetUBXNAVCLOCK->callbackData); // Call the callback
-    packetUBXNAVCLOCK->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXNAVRELPOSNED !=
-       NULL) // If RAM has been allocated for message storage
-      &&
-      (packetUBXNAVRELPOSNED->callbackData != NULL) // If RAM has been allocated
-                                                    // for the copy of the data
-      && (packetUBXNAVRELPOSNED->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXNAVRELPOSNED->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXNAVRELPOSNED->callbackPointer(
-        *packetUBXNAVRELPOSNED->callbackData); // Call the callback
-    packetUBXNAVRELPOSNED->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXRXMSFRBX !=
-       NULL) // If RAM has been allocated for message storage
-      && (packetUBXRXMSFRBX->callbackData != NULL) // If RAM has been allocated
-                                                   // for the copy of the data
-      && (packetUBXRXMSFRBX->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXRXMSFRBX->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXRXMSFRBX->callbackPointer(
-        *packetUBXRXMSFRBX->callbackData); // Call the callback
-    packetUBXRXMSFRBX->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXRXMRAWX !=
-       NULL) // If RAM has been allocated for message storage
-      && (packetUBXRXMRAWX->callbackData != NULL) // If RAM has been allocated
-                                                  // for the copy of the data
-      && (packetUBXRXMRAWX->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXRXMRAWX->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXRXMRAWX->callbackPointer(
-        *packetUBXRXMRAWX->callbackData); // Call the callback
-    packetUBXRXMRAWX->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXTIMTM2 != NULL) // If RAM has been allocated for message storage
-      && (packetUBXTIMTM2->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXTIMTM2->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXTIMTM2->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXTIMTM2->callbackPointer(
-        *packetUBXTIMTM2->callbackData); // Call the callback
-    packetUBXTIMTM2->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXESFALG != NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFALG->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXESFALG->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXESFALG->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXESFALG->callbackPointer(
-        *packetUBXESFALG->callbackData); // Call the callback
-    packetUBXESFALG->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXESFINS != NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFINS->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXESFINS->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXESFINS->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXESFINS->callbackPointer(
-        *packetUBXESFINS->callbackData); // Call the callback
-    packetUBXESFINS->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXESFMEAS !=
-       NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFMEAS->callbackData != NULL) // If RAM has been allocated
-                                                  // for the copy of the data
-      && (packetUBXESFMEAS->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXESFMEAS->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXESFMEAS->callbackPointer(
-        *packetUBXESFMEAS->callbackData); // Call the callback
-    packetUBXESFMEAS->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXESFRAW != NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFRAW->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXESFRAW->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXESFRAW->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXESFRAW->callbackPointer(
-        *packetUBXESFRAW->callbackData); // Call the callback
-    packetUBXESFRAW->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXESFSTATUS !=
-       NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFSTATUS->callbackData != NULL) // If RAM has been allocated
-                                                    // for the copy of the data
-      && (packetUBXESFSTATUS->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXESFSTATUS->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXESFSTATUS->callbackPointer(
-        *packetUBXESFSTATUS->callbackData); // Call the callback
-    packetUBXESFSTATUS->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXHNRATT != NULL) // If RAM has been allocated for message storage
-      && (packetUBXHNRATT->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXHNRATT->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXHNRATT->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXHNRATT->callbackPointer(
-        *packetUBXHNRATT->callbackData); // Call the callback
-    packetUBXHNRATT->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXHNRINS != NULL) // If RAM has been allocated for message storage
-      && (packetUBXHNRINS->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXHNRINS->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXHNRINS->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXHNRINS->callbackPointer(
-        *packetUBXHNRINS->callbackData); // Call the callback
-    packetUBXHNRINS->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
-  if ((packetUBXHNRPVT != NULL) // If RAM has been allocated for message storage
-      && (packetUBXHNRPVT->callbackData != NULL) // If RAM has been allocated
-                                                 // for the copy of the data
-      && (packetUBXHNRPVT->callbackPointer !=
-          NULL) // If the pointer to the callback has been defined
-      && (packetUBXHNRPVT->automaticFlags.flags.bits.callbackCopyValid ==
-          true)) // If the copy of the data is valid
-  {
-    packetUBXHNRPVT->callbackPointer(
-        *packetUBXHNRPVT->callbackData); // Call the callback
-    packetUBXHNRPVT->automaticFlags.flags.bits.callbackCopyValid =
-        false; // Mark the data as stale
-  }
-
+  tryCallBack(packetUBXNAVPOSECEF);
+  tryCallBack(packetUBXNAVSTATUS);
+  tryCallBack(packetUBXNAVDOP);
+  tryCallBack(packetUBXNAVATT);
+  tryCallBack(packetUBXNAVPVT);
+  tryCallBack(packetUBXNAVODO);
+  tryCallBack(packetUBXNAVVELECEF);
+  tryCallBack(packetUBXNAVVELNED);
+  tryCallBack(packetUBXNAVHPPOSECEF);
+  tryCallBack(packetUBXNAVHPPOSLLH);
+  tryCallBack(packetUBXNAVCLOCK);
+  tryCallBack(packetUBXNAVRELPOSNED);
+  tryCallBack(packetUBXRXMSFRBX);
+  tryCallBack(packetUBXRXMRAWX);
+  tryCallBack(packetUBXTIMTM2);
+  tryCallBack(packetUBXESFALG);
+  tryCallBack(packetUBXESFINS);
+  tryCallBack(packetUBXESFMEAS);
+  tryCallBack(packetUBXESFRAW);
+  tryCallBack(packetUBXESFSTATUS);
+  tryCallBack(packetUBXHNRATT);
+  tryCallBack(packetUBXHNRINS);
+  tryCallBack(packetUBXHNRPVT);
+ 
   checkCallbacksReentrant = false;
 }
 
@@ -5250,16 +4934,9 @@ uint8_t SFE_UBLOX_GNSS::getPowerSaveMode(uint16_t maxWait) {
   // Let's begin by checking the Protocol Version as UBX_CFG_RXM
   // is not supported on the ZED (protocol >= 27)
   uint8_t protVer = getProtocolVersionHigh(maxWait);
-  /*
-  if (isDebugDetailed())
-  {
-    _debugSerial->print(F("Protocol version is "));
-    _debugSerial->println(protVer);
-  }
-  */
+
   if (protVer >= 27) {
-    if (isDebugLimited())
-    {
+    if (isDebugLimited()) {
       _debugSerial->println(F("powerSaveMode (UBX-CFG-RXM) is not supported by "
                               "this protocol version"));
     }
