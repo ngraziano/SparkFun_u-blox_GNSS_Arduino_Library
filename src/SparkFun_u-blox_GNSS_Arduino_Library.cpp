@@ -3700,10 +3700,10 @@ template <class T> tryCallBack(T *ds) {
   // If the pointer to the callback has been defined
   // If the copy of the data is valid
   if (ds && ds->callbackData && ds->callbackPointer &&
-      ds->automaticFlags.flag.bits.callbackCopyValid) {
+      ds->automaticFlags.flags.bits.callbackCopyValid) {
     ds->callbackPointer(*ds->callbackData);
     // Mark the data as stale
-    ds->automaticFlags.flag.bits.callbackCopyValid = false;
+    ds->automaticFlags.flags.bits.callbackCopyValid = false;
   }
 }
 
