@@ -3694,7 +3694,7 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForNoACKResponse(ubxPacket *outgoingUBX,
   return (SFE_UBLOX_STATUS_TIMEOUT);
 }
 
-template <class T> tryCallBack(T *ds) {
+template <class T> void tryCallBack(T *ds) {
   // If RAM has been allocated for message storage
   // If RAM has been allocated for the copy of the data
   // If the pointer to the callback has been defined
