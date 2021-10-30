@@ -67,7 +67,7 @@ void SFE_UBLOX_GNSS::end(void) {
       NULL) // Check if RAM has been allocated for the file buffer
   {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(
           F("end: the file buffer has been deleted. You will need to call "
             "setFileBufferSize before .begin to create a new one."));
@@ -132,7 +132,7 @@ void SFE_UBLOX_GNSS::end(void) {
     if (packetUBXNAVPVT->callbackData != NULL) {
       delete packetUBXNAVPVT->callbackData;
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-      if (_printDebug == true) {
+      if (isDebugDetailed()) {
         _debugSerial->println(
             F("end: packetUBXNAVPVT->callbackData has been deleted"));
       }
@@ -141,7 +141,7 @@ void SFE_UBLOX_GNSS::end(void) {
     delete packetUBXNAVPVT;
     packetUBXNAVPVT = NULL; // Redundant?
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("end: packetUBXNAVPVT has been deleted"));
     }
 #endif
@@ -316,9 +316,7 @@ void SFE_UBLOX_GNSS::setPacketCfgPayloadSize(size_t payloadSize) {
     delete[] payloadCfg; // Created with new[]
     payloadCfg = NULL;   // Redundant?
     packetCfg.payload = payloadCfg;
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+    if (isDebugLimited())
       _debugSerial->println(F("setPacketCfgPayloadSize: Zero payloadSize!"));
   }
 
@@ -327,10 +325,8 @@ void SFE_UBLOX_GNSS::setPacketCfgPayloadSize(size_t payloadSize) {
   {
     payloadCfg = new uint8_t[payloadSize];
     packetCfg.payload = payloadCfg;
-    if(!payloadCfg)
-      if ((_printDebug == true) ||
-          (_printLimitedDebug ==
-           true)) // This is important. Print this if doing limited debugging
+    if (!payloadCfg)
+      if (isDebugLimited())
         _debugSerial->println(F("setPacketCfgPayloadSize: RAM alloc failed!"));
   }
 
@@ -343,10 +339,8 @@ void SFE_UBLOX_GNSS::setPacketCfgPayloadSize(size_t payloadSize) {
     delete[] payloadCfg; // Created with new[]
     payloadCfg = newPayload;
     packetCfg.payload = payloadCfg;
-    if(!payloadCfg)
-      if ((_printDebug == true) ||
-          (_printLimitedDebug ==
-           true)) // This is important. Print this if doing limited debugging
+    if (!payloadCfg)
+      if (isDebugLimited())
         _debugSerial->println(F("setPacketCfgPayloadSize: RAM resize failed!"));
   }
 
@@ -439,16 +433,13 @@ bool SFE_UBLOX_GNSS::begin(SPIClass &spiPort, uint8_t csPin,
   createFileBuffer();
 
   // Create the SPI buffer
-  if(!spiBuffer) // Memory has not yet been allocated - so use new
+  if (!spiBuffer) // Memory has not yet been allocated - so use new
   {
     spiBuffer = new uint8_t[getSpiTransactionSize()];
   }
 
-  if(!spiBuffer) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-    {
+  if (!spiBuffer) {
+    if (isDebugLimited()) {
       _debugSerial->print(
           F("begin (SPI): memory allocation failed for SPI Buffer!"));
       return false;
@@ -506,11 +497,11 @@ uint8_t SFE_UBLOX_GNSS::getI2CTransactionSize(void) {
 // message sent is larger than this buffer. If too big, you may run out of SRAM
 // on constrained architectures!
 void SFE_UBLOX_GNSS::setSpiTransactionSize(uint8_t transactionSize) {
-  if(!spiBuffer) {
+  if (!spiBuffer) {
     spiTransactionSize = transactionSize;
   } else {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("setSpiTransactionSize: you need to call "
                               "setSpiTransactionSize _before_ begin!"));
     }
@@ -546,28 +537,30 @@ void SFE_UBLOX_GNSS::enableDebugging(Stream &debugPort,
                                      bool printLimitedDebug) {
   _debugSerial =
       &debugPort; // Grab which port the user wants us to use for debugging
-  if (printLimitedDebug == false) {
-    _printDebug =
-        true; // Should we print the commands we send? Good for debugging
+
+  if (!printLimitedDebug) {
+    // Should we print the commands we send? Good for debugging
+    _printDebug = DebugLevels::DETAILED;
   } else {
-    _printLimitedDebug = true; // Should we print limited debug messages? Good
-                               // for debugging high navigation rates
+    // Should we print limited debug messages? Good
+    // for debugging high navigation rates
+    _printDebug = DebugLevels::LIMITED;
   }
 }
 void SFE_UBLOX_GNSS::disableDebugging(void) {
-  _printDebug = false; // Turn off extra print statements
-  _printLimitedDebug = false;
+  // Turn off extra print statements
+  _printDebug = DebugLevels::NONE;
 }
 
 // Safely print messages
 void SFE_UBLOX_GNSS::debugPrint(char *message) {
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(message);
   }
 }
 // Safely print messages
 void SFE_UBLOX_GNSS::debugPrintln(char *message) {
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->println(message);
   }
 }
@@ -663,10 +656,7 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX,
     uint8_t i2cError = _i2cPort->endTransmission(
         false); // Send a restart command. Do not release bus.
     if (i2cError != 0) {
-      if ((_printDebug == true) ||
-          (_printLimitedDebug ==
-           true)) // This is important. Print this if doing limited debugging
-      {
+      if (isDebugLimited()) {
         _debugSerial->print(
             F("checkUbloxI2C: I2C error: endTransmission returned "));
         _debugSerial->println(i2cError);
@@ -677,10 +667,7 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX,
     uint8_t bytesReturned =
         _i2cPort->requestFrom((uint8_t)_gpsI2Caddress, (uint8_t)2);
     if (bytesReturned != 2) {
-      if ((_printDebug == true) ||
-          (_printLimitedDebug ==
-           true)) // This is important. Print this if doing limited debugging
-      {
+      if (isDebugLimited()) {
         _debugSerial->print(
             F("checkUbloxI2C: I2C error: requestFrom 0xFD returned "));
         _debugSerial->println(bytesReturned);
@@ -692,11 +679,10 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX,
       uint8_t msb = _i2cPort->read();
       uint8_t lsb = _i2cPort->read();
       if (lsb == 0xFF) {
-        // I believe this is a u-blox bug. Device should never present an 0xFF.
-        if ((_printDebug == true) ||
-            (_printLimitedDebug ==
-             true)) // This is important. Print this if doing limited debugging
-        {
+        // I believe this is a u-blox bug. Device should never present an
+        // 0xFF.
+        if (isDebugLimited()) {
+
           _debugSerial->print(F("checkUbloxI2C: u-blox bug? Length lsb is "
                                 "0xFF. i2cPollingWait is "));
           _debugSerial->println(i2cPollingWait);
@@ -711,12 +697,14 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX,
       }
       // if (msb == 0xFF)
       // {
-      //   //I believe this is a u-blox bug. Device should never present an
-      //   0xFF. if ((_printDebug == true) || (_printLimitedDebug == true)) //
-      //   This is important. Print this if doing limited debugging
+      //   //I believe this is a u-blox bug. Device should never present
+      //   an 0xFF. if ((isDebugDetailed()) || (_printLimitedDebug ==
+      //   true)) // This is important. Print this if doing limited
+      //   debugging
       //   {
-      //     _debugSerial->print(F("checkUbloxI2C: u-blox bug? Length msb is
-      //     0xFF. i2cPollingWait is ")); _debugSerial->println(i2cPollingWait);
+      //     _debugSerial->print(F("checkUbloxI2C: u-blox bug? Length msb
+      //     is 0xFF. i2cPollingWait is "));
+      //     _debugSerial->println(i2cPollingWait);
       //   }
       //   if (debugPin >= 0)
       //   {
@@ -724,15 +712,15 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX,
       //     delay(10);
       //     digitalWrite((uint8_t)debugPin, HIGH);
       //   }
-      //   lastCheck = millis(); //Put off checking to avoid I2C bus traffic
-      //   return false;
+      //   lastCheck = millis(); //Put off checking to avoid I2C bus
+      //   traffic return false;
       // }
       bytesAvailable = (uint16_t)msb << 8 | lsb;
     }
 
     if (bytesAvailable == 0) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-      if (_printDebug == true) {
+      if (isDebugDetailed()) {
         _debugSerial->println(F("checkUbloxI2C: OK, zero bytes available"));
       }
 #endif
@@ -741,37 +729,24 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX,
     }
 
     // Check for undocumented bit error. We found this doing logic scans.
-    // This error is rare but if we incorrectly interpret the first bit of the
-    // two 'data available' bytes as 1 then we have far too many bytes to check.
-    // May be related to I2C setup time violations:
+    // This error is rare but if we incorrectly interpret the first bit of
+    // the two 'data available' bytes as 1 then we have far too many bytes
+    // to check. May be related to I2C setup time violations:
     // https://github.com/sparkfun/SparkFun_Ublox_Arduino_Library/issues/40
     if (bytesAvailable & ((uint16_t)1 << 15)) {
       // Clear the MSbit
       bytesAvailable &= ~((uint16_t)1 << 15);
-
-      // if ((_printDebug == true) || (_printLimitedDebug == true)) // This is
-      // important. Print this if doing limited debugging
-      // {
-      //   _debugSerial->print(F("checkUbloxI2C: Bytes available error: "));
-      //   _debugSerial->println(bytesAvailable);
-      //   if (debugPin >= 0)
-      //   {
-      //     digitalWrite((uint8_t)debugPin, LOW);
-      //     delay(10);
-      //     digitalWrite((uint8_t)debugPin, HIGH);
-      //   }
-      // }
     }
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
     if (bytesAvailable > 100) {
-      if (_printDebug == true) {
+      if (isDebugDetailed()) {
         _debugSerial->print(F("checkUbloxI2C: Large packet of "));
         _debugSerial->print(bytesAvailable);
         _debugSerial->println(F(" bytes received"));
       }
     } else {
-      if (_printDebug == true) {
+      if (isDebugDetailed()) {
         _debugSerial->print(F("checkUbloxI2C: Reading "));
         _debugSerial->print(bytesAvailable);
         _debugSerial->println(F(" bytes"));
@@ -783,10 +758,11 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX,
       _i2cPort->beginTransmission(_gpsI2Caddress);
       _i2cPort->write(0xFF); // 0xFF is the register to read data from
       if (_i2cPort->endTransmission(false) !=
-          0)            // Send a restart command. Do not release bus.
+          0)          // Send a restart command. Do not release bus.
         return false; // Sensor did not ACK
 
-      // Limit to 32 bytes or whatever the buffer limit is for given platform
+      // Limit to 32 bytes or whatever the buffer limit is for given
+      // platform
       uint16_t bytesToRead = bytesAvailable;
       if (bytesToRead > i2cTransactionSize)
         bytesToRead = i2cTransactionSize;
@@ -798,19 +774,17 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX,
         for (uint16_t x = 0; x < bytesToRead; x++) {
           uint8_t incoming = _i2cPort->read(); // Grab the actual character
 
-          // Check to see if the first read is 0x7F. If it is, the module is not
-          // ready to respond. Stop, wait, and try again
+          // Check to see if the first read is 0x7F. If it is, the module
+          // is not ready to respond. Stop, wait, and try again
           if (x == 0) {
             if ((incoming == 0x7F) && (ubx7FcheckDisabled == false)) {
-              if ((_printDebug == true) ||
-                  (_printLimitedDebug == true)) // This is important. Print this
-                                                // if doing limited debugging
-              {
+              if (isDebugLimited()) {
+
                 _debugSerial->println(F("checkUbloxU2C: u-blox error, module "
                                         "not ready with data (7F error)"));
               }
-              delay(5); // In logic analyzation, the module starting responding
-                        // after 1.48ms
+              delay(5); // In logic analyzation, the module starting
+                        // responding after 1.48ms
               if (debugPin >= 0) {
                 digitalWrite((uint8_t)debugPin, LOW);
                 delay(10);
@@ -859,13 +833,14 @@ bool SFE_UBLOX_GNSS::checkUbloxSpi(ubxPacket *incomingUBX,
   digitalWrite(_csPin, LOW);
   uint8_t byteReturned = _spiPort->transfer(0xFF);
 
-  // Note to future self: I think the 0xFF check might cause problems when
-  // attempting to process (e.g.) RAWX data which could legitimately contain
-  // 0xFF within the data stream. But the currentSentence check will certainly
-  // help!
+  // Note to future self: I think the 0xFF check might cause problems
+  // when attempting to process (e.g.) RAWX data which could
+  // legitimately contain 0xFF within the data stream. But the
+  // currentSentence check will certainly help!
 
-  // If we are not receiving a sentence (currentSentence == NONE) and the
-  // byteReturned is 0xFF, i.e. the module has no data for us, then delay for
+  // If we are not receiving a sentence (currentSentence == NONE) and
+  // the byteReturned is 0xFF, i.e. the module has no data for us, then
+  // delay for
   if ((byteReturned == 0xFF) && (currentSentence == NONE)) {
     digitalWrite(_csPin, HIGH);
     _spiPort->endTransaction();
@@ -883,8 +858,8 @@ bool SFE_UBLOX_GNSS::checkUbloxSpi(ubxPacket *incomingUBX,
 
 } // end checkUbloxSpi()
 
-// PRIVATE: Check if we have storage allocated for an incoming "automatic"
-// message
+// PRIVATE: Check if we have storage allocated for an incoming
+// "automatic" message
 bool SFE_UBLOX_GNSS::checkAutomatic(uint8_t Class, uint8_t ID) {
   bool result = false;
   switch (Class) {
@@ -1020,8 +995,8 @@ bool SFE_UBLOX_GNSS::checkAutomatic(uint8_t Class, uint8_t ID) {
   return (result);
 }
 
-// PRIVATE: Calculate how much RAM is needed to store the payload for a given
-// automatic message
+// PRIVATE: Calculate how much RAM is needed to store the payload for a
+// given automatic message
 uint16_t SFE_UBLOX_GNSS::getMaxPayloadSize(uint8_t Class, uint8_t ID) {
   uint16_t maxSize = 0;
   switch (Class) {
@@ -1142,12 +1117,12 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
       // We still don't know the response class
       ubxFrameCounter = 0;
       currentSentence = UBX;
-      // Reset the packetBuf.counter even though we will need to reset it again
-      // when ubxFrameCounter == 2
+      // Reset the packetBuf.counter even though we will need to reset
+      // it again when ubxFrameCounter == 2
       packetBuf.counter = 0;
       ignoreThisPayload = false; // We should not ignore this payload - yet
-      // Store data in packetBuf until we know if we have a requested class and
-      // ID match
+      // Store data in packetBuf until we know if we have a requested
+      // class and ID match
       activePacketBuffer = SFE_UBLOX_PACKET_PACKETBUF;
     } else if (incoming == '$') {
       nmeaByteCounter = 0; // Reset the NMEA byte counter
@@ -1157,11 +1132,13 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
       rtcmFrameCounter = 0;
       currentSentence = RTCM;
     } else {
-      // This character is unknown or we missed the previous start of a sentence
+      // This character is unknown or we missed the previous start of a
+      // sentence
     }
   }
 
-  // Depending on the sentence, pass the character to the individual processor
+  // Depending on the sentence, pass the character to the individual
+  // processor
   if (currentSentence == UBX) {
     // Decide what type of response this is
     if ((ubxFrameCounter == 0) && (incoming != 0xB5)) // ISO 'μ'
@@ -1169,19 +1146,20 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
     else if ((ubxFrameCounter == 1) && (incoming != 0x62)) // ASCII 'b'
       currentSentence = NONE; // Something went wrong. Reset.
     // Note to future self:
-    // There may be some duplication / redundancy in the next few lines as
-    // processUBX will also load information into packetBuf, but we'll do it
-    // here too for clarity
+    // There may be some duplication / redundancy in the next few lines
+    // as processUBX will also load information into packetBuf, but
+    // we'll do it here too for clarity
     else if (ubxFrameCounter == 2) // Class
     {
       // Record the class in packetBuf until we know what to do with it
       packetBuf.cls = incoming; // (Duplication)
-      rollingChecksumA =
-          0; // Reset our rolling checksums here (not when we receive the 0xB5)
+      rollingChecksumA = 0;     // Reset our rolling checksums here (not
+                                // when we receive the 0xB5)
       rollingChecksumB = 0;
       packetBuf.counter = 0; // Reset the packetBuf.counter (again)
       packetBuf.valid =
-          SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // Reset the packet validity
+          SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // Reset the packet
+                                                 // validity
                                                  // (redundant?)
       packetBuf.startingSpot =
           incomingUBX->startingSpot; // Copy the startingSpot
@@ -1190,14 +1168,15 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
       // Record the ID in packetBuf until we know what to do with it
       packetBuf.id = incoming; // (Duplication)
       // We can now identify the type of response
-      // If the packet we are receiving is not an ACK then check for a class and
-      // ID match
+      // If the packet we are receiving is not an ACK then check for a
+      // class and ID match
       if (packetBuf.cls != UBX_CLASS_ACK) {
         // This is not an ACK so check for a class and ID match
         if ((packetBuf.cls == requestedClass) &&
             (packetBuf.id == requestedID)) {
           // This is not an ACK and we have a class and ID match
-          // So start diverting data into incomingUBX (usually packetCfg)
+          // So start diverting data into incomingUBX (usually
+          // packetCfg)
           activePacketBuffer = SFE_UBLOX_PACKET_PACKETCFG;
           incomingUBX->cls = packetBuf.cls; // Copy the class and ID into
                                             // incomingUBX (usually packetCfg)
@@ -1205,36 +1184,33 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
           incomingUBX->counter =
               packetBuf.counter; // Copy over the .counter too
         }
-        // This is not an ACK and we do not have a complete class and ID match
-        // So let's check if this is an "automatic" message which has its own
-        // storage defined
+        // This is not an ACK and we do not have a complete class and ID
+        // match So let's check if this is an "automatic" message which
+        // has its own storage defined
         else if (checkAutomatic(packetBuf.cls, packetBuf.id)) {
-          // This is not the message we were expecting but it has its own
-          // storage and so we should process it anyway. We'll try to use
-          // packetAuto to buffer the message (so it can't overwrite anything in
-          // packetCfg). We need to allocate memory for the packetAuto payload
-          // (payloadAuto) - and delete it once reception is complete.
-          uint16_t maxPayload = getMaxPayloadSize(
-              packetBuf.cls, packetBuf.id); // Calculate how much RAM we need
+          // This is not the message we were expecting but it has its
+          // own storage and so we should process it anyway. We'll try
+          // to use packetAuto to buffer the message (so it can't
+          // overwrite anything in packetCfg). We need to allocate
+          // memory for the packetAuto payload (payloadAuto) - and
+          // delete it once reception is complete.
+          uint16_t maxPayload =
+              getMaxPayloadSize(packetBuf.cls,
+                                packetBuf.id); // Calculate how much RAM we need
           if (maxPayload == 0) {
-            if ((_printDebug == true) ||
-                (_printLimitedDebug == true)) // This is important. Print this
-                                              // if doing limited debugging
-            {
-              _debugSerial->print(
-                  F("process: getMaxPayloadSize returned ZERO!! Class: 0x"));
+            if (isDebugLimited()) {
+
+              _debugSerial->print(F("process: getMaxPayloadSize "
+                                    "returned ZERO!! Class: 0x"));
               _debugSerial->print(packetBuf.cls);
               _debugSerial->print(F(" ID: 0x"));
               _debugSerial->println(packetBuf.id);
             }
           }
-          if (payloadAuto != NULL) // Check if memory is already allocated -
-                                   // this should be impossible!
+          if (payloadAuto != NULL) // Check if memory is already allocated
+                                   // - this should be impossible!
           {
-            if ((_printDebug == true) ||
-                (_printLimitedDebug == true)) // This is important. Print this
-                                              // if doing limited debugging
-            {
+            if (isDebugLimited()) {
               _debugSerial->println(F("process: memory is already allocated "
                                       "for payloadAuto! Deleting..."));
             }
@@ -1244,22 +1220,20 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
           }
           payloadAuto = new uint8_t[maxPayload]; // Allocate RAM for payloadAuto
           packetAuto.payload = payloadAuto;
-          if(!payloadAuto) // Check if the alloc failed
+          if (!payloadAuto) // Check if the alloc failed
           {
-            if ((_printDebug == true) ||
-                (_printLimitedDebug == true)) // This is important. Print this
-                                              // if doing limited debugging
-            {
+            if (isDebugLimited()) {
               _debugSerial->print(F("process: memory allocation failed for "
                                     "\"automatic\" message: Class: 0x"));
               _debugSerial->print(packetBuf.cls, HEX);
               _debugSerial->print(F(" ID: 0x"));
               _debugSerial->println(packetBuf.id, HEX);
-              _debugSerial->println(
-                  F("process: \"automatic\" message could overwrite data"));
+              _debugSerial->println(F("process: \"automatic\" message could "
+                                      "overwrite data"));
             }
-            // The RAM allocation failed so fall back to using incomingUBX
-            // (usually packetCfg) even though we risk overwriting data
+            // The RAM allocation failed so fall back to using
+            // incomingUBX (usually packetCfg) even though we risk
+            // overwriting data
             activePacketBuffer = SFE_UBLOX_PACKET_PACKETCFG;
             incomingUBX->cls = packetBuf.cls; // Copy the class and ID into
                                               // incomingUBX (usually packetCfg)
@@ -1267,8 +1241,8 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
             incomingUBX->counter =
                 packetBuf.counter; // Copy over the .counter too
           } else {
-            // The RAM allocation was successful so we start diverting data into
-            // packetAuto and process it
+            // The RAM allocation was successful so we start
+            // diverting data into packetAuto and process it
             activePacketBuffer = SFE_UBLOX_PACKET_PACKETAUTO;
             packetAuto.cls =
                 packetBuf.cls; // Copy the class and ID into packetAuto
@@ -1276,12 +1250,12 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
             packetAuto.counter =
                 packetBuf.counter; // Copy over the .counter too
             packetAuto.startingSpot =
-                packetBuf.startingSpot; // And the starting spot? (Probably
-                                        // redundant)
+                packetBuf.startingSpot; // And the starting spot?
+                                        // (Probably redundant)
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-            if (_printDebug == true) {
-              _debugSerial->print(
-                  F("process: incoming \"automatic\" message: Class: 0x"));
+            if (isDebugDetailed()) {
+              _debugSerial->print(F("process: incoming \"automatic\" message: "
+                                    "Class: 0x"));
               _debugSerial->print(packetBuf.cls, HEX);
               _debugSerial->print(F(" ID: 0x"));
               _debugSerial->println(packetBuf.id, HEX);
@@ -1289,71 +1263,73 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
 #endif
           }
         } else {
-          // This is not an ACK and we do not have a class and ID match
-          // so we should keep diverting data into packetBuf and ignore the
-          // payload
+          // This is not an ACK and we do not have a class and ID
+          // match so we should keep diverting data into packetBuf
+          // and ignore the payload
           ignoreThisPayload = true;
         }
       } else {
         // This is an ACK so it is to early to do anything with it
-        // We need to wait until we have received the length and data bytes
-        // So we should keep diverting data into packetBuf
+        // We need to wait until we have received the length and
+        // data bytes So we should keep diverting data into
+        // packetBuf
       }
     } else if (ubxFrameCounter == 4) // Length LSB
     {
-      // We should save the length in packetBuf even if activePacketBuffer ==
-      // SFE_UBLOX_PACKET_PACKETCFG
+      // We should save the length in packetBuf even if
+      // activePacketBuffer == SFE_UBLOX_PACKET_PACKETCFG
       packetBuf.len = incoming;      // (Duplication)
     } else if (ubxFrameCounter == 5) // Length MSB
     {
-      // We should save the length in packetBuf even if activePacketBuffer ==
-      // SFE_UBLOX_PACKET_PACKETCFG
+      // We should save the length in packetBuf even if
+      // activePacketBuffer == SFE_UBLOX_PACKET_PACKETCFG
       packetBuf.len |= incoming << 8; // (Duplication)
-    } else if (ubxFrameCounter == 6)  // This should be the first byte of the
-                                      // payload unless .len is zero
+    } else if (ubxFrameCounter == 6)  // This should be the first byte of
+                                      // the payload unless .len is zero
     {
-      if (packetBuf.len ==
-          0) // Check if length is zero (hopefully this is impossible!)
+      if (packetBuf.len == 0) // Check if length is zero
+                              // (hopefully this is impossible!)
       {
-        if ((_printDebug == true) ||
-            (_printLimitedDebug ==
-             true)) // This is important. Print this if doing limited debugging
-        {
-          _debugSerial->print(
-              F("process: ZERO LENGTH packet received: Class: 0x"));
+        if (isDebugDetailed()) {
+
+          _debugSerial->print(F("process: ZERO LENGTH packet "
+                                "received: Class: 0x"));
           _debugSerial->print(packetBuf.cls, HEX);
           _debugSerial->print(F(" ID: 0x"));
           _debugSerial->println(packetBuf.id, HEX);
         }
-        // If length is zero (!) this will be the first byte of the checksum so
-        // record it
+        // If length is zero (!) this will be the first byte of
+        // the checksum so record it
         packetBuf.checksumA = incoming;
       } else {
-        // The length is not zero so record this byte in the payload
+        // The length is not zero so record this byte in the
+        // payload
         packetBuf.payload[0] = incoming;
       }
     } else if (ubxFrameCounter == 7) // This should be the second byte of the
                                      // payload unless .len is zero or one
     {
-      if (packetBuf.len ==
-          0) // Check if length is zero (hopefully this is impossible!)
+      if (packetBuf.len == 0) // Check if length is zero
+                              // (hopefully this is impossible!)
       {
-        // If length is zero (!) this will be the second byte of the checksum so
-        // record it
+        // If length is zero (!) this will be the second byte of
+        // the checksum so record it
         packetBuf.checksumB = incoming;
       } else if (packetBuf.len == 1) // Check if length is one
       {
-        // The length is one so this is the first byte of the checksum
+        // The length is one so this is the first byte of the
+        // checksum
         packetBuf.checksumA = incoming;
       } else // Length is >= 2 so this must be a payload byte
       {
         packetBuf.payload[1] = incoming;
       }
-      // Now that we have received two payload bytes, we can check for a
-      // matching ACK/NACK
+      // Now that we have received two payload bytes, we can
+      // check for a matching ACK/NACK
       if ((activePacketBuffer ==
-           SFE_UBLOX_PACKET_PACKETBUF) // If we are not already processing a
-                                       // data packet
+           SFE_UBLOX_PACKET_PACKETBUF)        // If we are not already
+                                              // processing a data
+                                              // packet
           && (packetBuf.cls == UBX_CLASS_ACK) // and if this is an ACK/NACK
           &&
           (packetBuf.payload[0] == requestedClass)  // and if the class matches
@@ -1361,7 +1337,8 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
       {
         if (packetBuf.len == 2) // Check if .len is 2
         {
-          // Then this is a matching ACK so copy it into packetAck
+          // Then this is a matching ACK so copy it into
+          // packetAck
           activePacketBuffer = SFE_UBLOX_PACKET_PACKETACK;
           packetAck.cls = packetBuf.cls;
           packetAck.id = packetBuf.id;
@@ -1369,14 +1346,12 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
           packetAck.counter = packetBuf.counter;
           packetAck.payload[0] = packetBuf.payload[0];
           packetAck.payload[1] = packetBuf.payload[1];
-        } else // Length is not 2 (hopefully this is impossible!)
+        } else // Length is not 2 (hopefully this is
+               // impossible!)
         {
-          if ((_printDebug == true) ||
-              (_printLimitedDebug == true)) // This is important. Print this if
-                                            // doing limited debugging
-          {
-            _debugSerial->print(
-                F("process: ACK received with .len != 2: Class: 0x"));
+          if (isDebugLimited()) {
+            _debugSerial->print(F("process: ACK received with "
+                                  ".len != 2: Class: 0x"));
             _debugSerial->print(packetBuf.payload[0], HEX);
             _debugSerial->print(F(" ID: 0x"));
             _debugSerial->print(packetBuf.payload[1], HEX);
@@ -1394,36 +1369,37 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
       processUBX(incoming, incomingUBX, requestedClass, requestedID);
     else if (activePacketBuffer == SFE_UBLOX_PACKET_PACKETBUF)
       processUBX(incoming, &packetBuf, requestedClass, requestedID);
-    else // if (activePacketBuffer == SFE_UBLOX_PACKET_PACKETAUTO)
+    else // if (activePacketBuffer ==
+         // SFE_UBLOX_PACKET_PACKETAUTO)
       processUBX(incoming, &packetAuto, requestedClass, requestedID);
 
     // Finally, increment the frame counter
     ubxFrameCounter++;
-  } else if (currentSentence ==
-             NMEA) // Process incoming NMEA mesages. Selectively log if desired.
+  } else if (currentSentence == NMEA) // Process incoming NMEA mesages.
+                                      // Selectively log if desired.
   {
     if ((nmeaByteCounter == 0) && (incoming != '$')) {
-      currentSentence =
-          NONE; // Something went wrong. Reset. (Almost certainly redundant!)
+      currentSentence = NONE; // Something went wrong. Reset.
+                              // (Almost certainly redundant!)
     } else if ((nmeaByteCounter == 1) && (incoming != 'G')) {
       currentSentence = NONE; // Something went wrong. Reset.
     } else if ((nmeaByteCounter >= 0) && (nmeaByteCounter <= 5)) {
-      nmeaAddressField[nmeaByteCounter] =
-          incoming; // Store the start character and NMEA address field
+      nmeaAddressField[nmeaByteCounter] = incoming; // Store the start character
+                                                    // and NMEA address field
     }
 
     if (nmeaByteCounter == 5) {
-      // We've just received the end of the address field. Check if it is
-      // selected for logging
+      // We've just received the end of the address field. Check
+      // if it is selected for logging
       if (logThisNMEA()) {
-        storeFileBytes(
-            &nmeaAddressField[0],
-            6); // Add start character and address field to the file buffer
+        storeFileBytes(&nmeaAddressField[0],
+                       6); // Add start character and address
+                           // field to the file buffer
       }
       // Check if it should be passed to processNMEA
       if (processThisNMEA()) {
-        processNMEA(nmeaAddressField[0]); // Process the start character and
-                                          // address field
+        processNMEA(nmeaAddressField[0]); // Process the start character
+                                          // and address field
         processNMEA(nmeaAddressField[1]);
         processNMEA(nmeaAddressField[2]);
         processNMEA(nmeaAddressField[3]);
@@ -1433,24 +1409,25 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
     }
 
     if ((nmeaByteCounter > 5) ||
-        (nmeaByteCounter < 0)) // Should we add incoming to the file buffer
-                               // and/or pass it to processNMEA?
+        (nmeaByteCounter < 0)) // Should we add incoming to the file
+                               // buffer and/or pass it to processNMEA?
     {
       if (logThisNMEA())
-        storeFileBytes(&incoming, 1); // Add incoming to the file buffer
+        storeFileBytes(&incoming,
+                       1); // Add incoming to the file buffer
       if (processThisNMEA())
         processNMEA(incoming); // Pass incoming to processNMEA
     }
 
     if (incoming == '*')
-      nmeaByteCounter =
-          -5; // We are expecting * plus two checksum bytes plus CR and LF
+      nmeaByteCounter = -5; // We are expecting * plus two
+                            // checksum bytes plus CR and LF
 
     nmeaByteCounter++; // Increment the byte counter
 
-    if (nmeaByteCounter ==
-        maxNMEAByteCount)     // Check if we have processed too many bytes
-      currentSentence = NONE; // Something went wrong. Reset.
+    if (nmeaByteCounter == maxNMEAByteCount) // Check if we have
+                                             // processed too many bytes
+      currentSentence = NONE;                // Something went wrong. Reset.
 
     if (nmeaByteCounter == 0) // Check if we are done
       currentSentence = NONE; // All done!
@@ -1459,8 +1436,8 @@ void SFE_UBLOX_GNSS::process(uint8_t incoming, ubxPacket *incomingUBX,
   }
 }
 
-// PRIVATE: Return true if we should add this NMEA message to the file buffer
-// for logging
+// PRIVATE: Return true if we should add this NMEA message to
+// the file buffer for logging
 bool SFE_UBLOX_GNSS::logThisNMEA() {
   if (_logNMEA.bits.all == 1)
     return true;
@@ -1532,7 +1509,8 @@ bool SFE_UBLOX_GNSS::logThisNMEA() {
   return false;
 }
 
-// PRIVATE: Return true if we should pass this NMEA message to processNMEA
+// PRIVATE: Return true if we should pass this NMEA message to
+// processNMEA
 bool SFE_UBLOX_GNSS::processThisNMEA() {
   if (_processNMEA.bits.all == 1)
     return true;
@@ -1604,40 +1582,43 @@ bool SFE_UBLOX_GNSS::processThisNMEA() {
   return false;
 }
 
-// This is the default or generic NMEA processor. We're only going to pipe the
-// data to serial port so we can see it. User could overwrite this function to
-// pipe characters to nmea.process(c) of tinyGPS or MicroNMEA Or user could pipe
+// This is the default or generic NMEA processor. We're only
+// going to pipe the data to serial port so we can see it. User
+// could overwrite this function to pipe characters to
+// nmea.process(c) of tinyGPS or MicroNMEA Or user could pipe
 // each character to a buffer, radio, etc.
 void SFE_UBLOX_GNSS::processNMEA(char incoming) {
-  // If user has assigned an output port then pipe the characters there
+  // If user has assigned an output port then pipe the
+  // characters there
   if (_nmeaOutputPort != NULL)
     _nmeaOutputPort->write(incoming); // Echo this byte to the serial port
 }
 
-// We need to be able to identify an RTCM packet and then the length
-// so that we know when the RTCM message is completely received and we then
-// start listening for other sentences (like NMEA or UBX) RTCM packet structure
-// is very odd. I never found RTCM STANDARD 10403.2 but
-// http://d1.amobbs.com/bbs_upload782111/files_39/ourdev_635123CK0HJT.pdf is
-// good
+// We need to be able to identify an RTCM packet and then the
+// length so that we know when the RTCM message is completely
+// received and we then start listening for other sentences
+// (like NMEA or UBX) RTCM packet structure is very odd. I never
+// found RTCM STANDARD 10403.2 but
+// http://d1.amobbs.com/bbs_upload782111/files_39/ourdev_635123CK0HJT.pdf
+// is good
 // https://dspace.cvut.cz/bitstream/handle/10467/65205/F3-BP-2016-Shkalikava-Anastasiya-Prenos%20polohove%20informace%20prostrednictvim%20datove%20site.pdf?sequence=-1
 // Lead me to:
 // https://forum.u-blox.com/index.php/4348/how-to-read-rtcm-messages-from-neo-m8p
 // RTCM 3.2 bytes look like this:
 // Byte 0: Always 0xD3
 // Byte 1: 6-bits of zero
-// Byte 2: 10-bits of length of this packet including the first two-ish header
-// bytes, + 6. byte 3 + 4 bits: Msg type 12 bits Example: D3 00 7C 43 F0 ... /
-// 0x7C = 124+6 = 130 bytes in this packet, 0x43F = Msg type 1087
+// Byte 2: 10-bits of length of this packet including the first
+// two-ish header bytes, + 6. byte 3 + 4 bits: Msg type 12 bits
+// Example: D3 00 7C 43 F0 ... / 0x7C = 124+6 = 130 bytes in
+// this packet, 0x43F = Msg type 1087
 void SFE_UBLOX_GNSS::processRTCMframe(uint8_t incoming) {
   if (rtcmFrameCounter == 1) {
-    rtcmLen =
-        (incoming & 0x03)
-        << 8; // Get the last two bits of this byte. Bits 8&9 of 10-bit length
+    rtcmLen = (incoming & 0x03) << 8; // Get the last two bits of this
+                                      // byte. Bits 8&9 of 10-bit length
   } else if (rtcmFrameCounter == 2) {
     rtcmLen |= incoming; // Bits 0-7 of packet length
-    rtcmLen += 6; // There are 6 additional bytes of what we presume is header,
-                  // msgType, CRC, and stuff
+    rtcmLen += 6;        // There are 6 additional bytes of what we
+                         // presume is header, msgType, CRC, and stuff
   }
   /*else if (rtcmFrameCounter == 3)
   {
@@ -1650,7 +1631,8 @@ void SFE_UBLOX_GNSS::processRTCMframe(uint8_t incoming) {
 
   rtcmFrameCounter++;
 
-  processRTCM(incoming); // Here is where we expose this byte to the user
+  processRTCM(incoming); // Here is where we expose this byte to
+                         // the user
 
   if (rtcmFrameCounter == rtcmLen) {
     // We're done!
@@ -1659,17 +1641,20 @@ void SFE_UBLOX_GNSS::processRTCMframe(uint8_t incoming) {
 }
 
 // This function is called for each byte of an RTCM frame
-// Ths user can overwrite this function and process the RTCM frame as they
-// please Bytes can be piped to Serial or other interface. The consumer could be
-// a radio or the internet (Ntrip broadcaster)
+// Ths user can overwrite this function and process the RTCM
+// frame as they please Bytes can be piped to Serial or other
+// interface. The consumer could be a radio or the internet
+// (Ntrip broadcaster)
 void SFE_UBLOX_GNSS::processRTCM(
-    uint8_t incoming) // IGNORE COMPILER WARNING unused parameter 'incoming'
+    uint8_t incoming) // IGNORE COMPILER WARNING unused
+                      // parameter 'incoming'
 {
-  // Radio.sendReliable((String)incoming); //An example of passing this byte to
-  // a radio
+  // Radio.sendReliable((String)incoming); //An example of
+  // passing this byte to a radio
 
-  //_debugSerial->write(incoming); //An example of passing this byte out the
-  //serial port
+  //_debugSerial->write(incoming); //An example of passing this
+  // byte out the
+  // serial port
 
   // Debug printing
   //   _debugSerial->print(F(" "));
@@ -1680,35 +1665,35 @@ void SFE_UBLOX_GNSS::processRTCM(
 }
 
 // Given a character, file it away into the uxb packet structure
-// Set valid to VALID or NOT_VALID once sentence is completely received and
-// passes or fails CRC The payload portion of the packet can be 100s of bytes
-// but the max array size is packetCfgPayloadSize bytes. startingSpot can be set
-// so we only record a subset of bytes within a larger packet.
+// Set valid to VALID or NOT_VALID once sentence is completely
+// received and passes or fails CRC The payload portion of the
+// packet can be 100s of bytes but the max array size is
+// packetCfgPayloadSize bytes. startingSpot can be set so we
+// only record a subset of bytes within a larger packet.
 void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
                                 uint8_t requestedClass, uint8_t requestedID) {
-  // If incomingUBX is a user-defined custom packet, then the payload size could
-  // be different to packetCfgPayloadSize. TO DO: update this to prevent an
-  // overrun when receiving an automatic message
+  // If incomingUBX is a user-defined custom packet, then the
+  // payload size could be different to packetCfgPayloadSize. TO
+  // DO: update this to prevent an overrun when receiving an
+  // automatic message
   //        and the incomingUBX payload size is smaller than
   //        packetCfgPayloadSize.
   uint16_t maximum_payload_size;
   if (activePacketBuffer == SFE_UBLOX_PACKET_PACKETCFG)
     maximum_payload_size = packetCfgPayloadSize;
   else if (activePacketBuffer == SFE_UBLOX_PACKET_PACKETAUTO) {
-    // Calculate maximum payload size once Class and ID have been received
-    // (This check is probably redundant as activePacketBuffer can only be
+    // Calculate maximum payload size once Class and ID have
+    // been received (This check is probably redundant as
+    // activePacketBuffer can only be
     // SFE_UBLOX_PACKET_PACKETAUTO
     //  when ubxFrameCounter >= 3)
     // if (incomingUBX->counter >= 2)
     //{
     maximum_payload_size = getMaxPayloadSize(incomingUBX->cls, incomingUBX->id);
     if (maximum_payload_size == 0) {
-      if ((_printDebug == true) ||
-          (_printLimitedDebug ==
-           true)) // This is important. Print this if doing limited debugging
-      {
-        _debugSerial->print(
-            F("processUBX: getMaxPayloadSize returned ZERO!! Class: 0x"));
+      if (isDebugLimited()) {
+        _debugSerial->print(F("processUBX: getMaxPayloadSize "
+                              "returned ZERO!! Class: 0x"));
         _debugSerial->print(incomingUBX->cls);
         _debugSerial->print(F(" ID: 0x"));
         _debugSerial->println(incomingUBX->id);
@@ -1723,8 +1708,8 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
   bool overrun = false;
 
   // Add all incoming bytes to the rolling checksum
-  // Stop at len+4 as this is the checksum bytes to that should not be added to
-  // the rolling checksum
+  // Stop at len+4 as this is the checksum bytes to that should
+  // not be added to the rolling checksum
   if (incomingUBX->counter < incomingUBX->len + 4)
     addToChecksum(incoming);
 
@@ -1745,49 +1730,56 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
   {
     incomingUBX->checksumB = incoming;
 
-    currentSentence = NONE; // We're done! Reset the sentence to being looking
-                            // for a new start char
+    currentSentence = NONE; // We're done! Reset the sentence to
+                            // being looking for a new start char
 
     // Validate this sentence
     if ((incomingUBX->checksumA == rollingChecksumA) &&
         (incomingUBX->checksumB == rollingChecksumB)) {
-      incomingUBX->valid =
-          SFE_UBLOX_PACKET_VALIDITY_VALID; // Flag the packet as valid
+      incomingUBX->valid = SFE_UBLOX_PACKET_VALIDITY_VALID; // Flag the packet
+                                                            // as valid
 
-      // Let's check if the class and ID match the requestedClass and
-      // requestedID Remember - this could be a data packet or an ACK packet
+      // Let's check if the class and ID match the
+      // requestedClass and requestedID Remember - this could be
+      // a data packet or an ACK packet
       if ((incomingUBX->cls == requestedClass) &&
           (incomingUBX->id == requestedID)) {
         incomingUBX->classAndIDmatch =
-            SFE_UBLOX_PACKET_VALIDITY_VALID; // If we have a match, set the
-                                             // classAndIDmatch flag to valid
+            SFE_UBLOX_PACKET_VALIDITY_VALID; // If we have a
+                                             // match, set the
+                                             // classAndIDmatch
+                                             // flag to valid
       }
 
-      // If this is an ACK then let's check if the class and ID match the
-      // requestedClass and requestedID
+      // If this is an ACK then let's check if the class and ID
+      // match the requestedClass and requestedID
       else if ((incomingUBX->cls == UBX_CLASS_ACK) &&
                (incomingUBX->id == UBX_ACK_ACK) &&
                (incomingUBX->payload[0] == requestedClass) &&
                (incomingUBX->payload[1] == requestedID)) {
         incomingUBX->classAndIDmatch =
-            SFE_UBLOX_PACKET_VALIDITY_VALID; // If we have a match, set the
-                                             // classAndIDmatch flag to valid
+            SFE_UBLOX_PACKET_VALIDITY_VALID; // If we have a
+                                             // match, set the
+                                             // classAndIDmatch
+                                             // flag to valid
       }
 
-      // If this is a NACK then let's check if the class and ID match the
-      // requestedClass and requestedID
+      // If this is a NACK then let's check if the class and ID
+      // match the requestedClass and requestedID
       else if ((incomingUBX->cls == UBX_CLASS_ACK) &&
                (incomingUBX->id == UBX_ACK_NACK) &&
                (incomingUBX->payload[0] == requestedClass) &&
                (incomingUBX->payload[1] == requestedID)) {
         incomingUBX->classAndIDmatch =
-            SFE_UBLOX_PACKET_NOTACKNOWLEDGED; // If we have a match, set the
-                                              // classAndIDmatch flag to
+            SFE_UBLOX_PACKET_NOTACKNOWLEDGED; // If we have a
+                                              // match, set the
+                                              // classAndIDmatch
+                                              // flag to
                                               // NOTACKNOWLEDGED
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
-          _debugSerial->print(
-              F("processUBX: NACK received: Requested Class: 0x"));
+        if (isDebugDetailed()) {
+          _debugSerial->print(F("processUBX: NACK received: "
+                                "Requested Class: 0x"));
           _debugSerial->print(incomingUBX->payload[0], HEX);
           _debugSerial->print(F(" Requested ID: 0x"));
           _debugSerial->println(incomingUBX->payload[1], HEX);
@@ -1795,15 +1787,17 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
 #endif
       }
 
-      // This is not an ACK and we do not have a complete class and ID match
-      // So let's check for an "automatic" message arriving
+      // This is not an ACK and we do not have a complete class
+      // and ID match So let's check for an "automatic" message
+      // arriving
       else if (checkAutomatic(incomingUBX->cls, incomingUBX->id)) {
         // This isn't the message we are looking for...
-        // Let's say so and leave incomingUBX->classAndIDmatch _unchanged_
+        // Let's say so and leave incomingUBX->classAndIDmatch
+        // _unchanged_
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
-          _debugSerial->print(
-              F("processUBX: incoming \"automatic\" message: Class: 0x"));
+        if (isDebugDetailed()) {
+          _debugSerial->print(F("processUBX: incoming \"automatic\" message: "
+                                "Class: 0x"));
           _debugSerial->print(incomingUBX->cls, HEX);
           _debugSerial->print(F(" ID: 0x"));
           _debugSerial->println(incomingUBX->id, HEX);
@@ -1812,7 +1806,7 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
       }
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-      if (_printDebug == true) {
+      if (isDebugDetailed()) {
         _debugSerial->print(F("Incoming: Size: "));
         _debugSerial->print(incomingUBX->len);
         _debugSerial->print(F(" Received: "));
@@ -1833,8 +1827,8 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
       }
 #endif
 
-      // We've got a valid packet, now do something with it but only if
-      // ignoreThisPayload is false
+      // We've got a valid packet, now do something with it but
+      // only if ignoreThisPayload is false
       if (ignoreThisPayload == false) {
         processUBXpacket(incomingUBX);
       }
@@ -1842,33 +1836,39 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
     {
       incomingUBX->valid = SFE_UBLOX_PACKET_VALIDITY_NOT_VALID;
 
-      // Let's check if the class and ID match the requestedClass and
-      // requestedID. This is potentially risky as we are saying that we saw the
-      // requested Class and ID but that the packet checksum failed. Potentially
-      // it could be the class or ID bytes that caused the checksum error!
+      // Let's check if the class and ID match the
+      // requestedClass and requestedID. This is potentially
+      // risky as we are saying that we saw the requested Class
+      // and ID but that the packet checksum failed. Potentially
+      // it could be the class or ID bytes that caused the
+      // checksum error!
       if ((incomingUBX->cls == requestedClass) &&
           (incomingUBX->id == requestedID)) {
         incomingUBX->classAndIDmatch =
-            SFE_UBLOX_PACKET_VALIDITY_NOT_VALID; // If we have a match, set the
-                                                 // classAndIDmatch flag to not
+            SFE_UBLOX_PACKET_VALIDITY_NOT_VALID; // If we have a
+                                                 // match, set
+                                                 // the
+                                                 // classAndIDmatch
+                                                 // flag to not
                                                  // valid
       }
-      // If this is an ACK then let's check if the class and ID match the
-      // requestedClass and requestedID
+      // If this is an ACK then let's check if the class and ID
+      // match the requestedClass and requestedID
       else if ((incomingUBX->cls == UBX_CLASS_ACK) &&
                (incomingUBX->payload[0] == requestedClass) &&
                (incomingUBX->payload[1] == requestedID)) {
         incomingUBX->classAndIDmatch =
-            SFE_UBLOX_PACKET_VALIDITY_NOT_VALID; // If we have a match, set the
-                                                 // classAndIDmatch flag to not
+            SFE_UBLOX_PACKET_VALIDITY_NOT_VALID; // If we have a
+                                                 // match, set
+                                                 // the
+                                                 // classAndIDmatch
+                                                 // flag to not
                                                  // valid
       }
 
-      if ((_printDebug == true) ||
-          (_printLimitedDebug ==
-           true)) // This is important. Print this if doing limited debugging
-      {
-        // Drive an external pin to allow for easier logic analyzation
+      if (isDebugLimited()) {
+        // Drive an external pin to allow for easier logic
+        // analyzation
         if (debugPin >= 0) {
           digitalWrite((uint8_t)debugPin, LOW);
           delay(10);
@@ -1889,8 +1889,8 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
       }
     }
 
-    // Now that the packet is complete and has been processed, we need to delete
-    // the memory allocated for packetAuto
+    // Now that the packet is complete and has been processed,
+    // we need to delete the memory allocated for packetAuto
     if (activePacketBuffer == SFE_UBLOX_PACKET_PACKETAUTO) {
       delete[] payloadAuto; // Created with new[]
       payloadAuto = NULL;   // Redundant?
@@ -1898,8 +1898,8 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
     }
   } else // Load this byte into the payload array
   {
-    // If an automatic packet comes in asynchronously, we need to fudge the
-    // startingSpot
+    // If an automatic packet comes in asynchronously, we need
+    // to fudge the startingSpot
     uint16_t startingSpot = incomingUBX->startingSpot;
     if (checkAutomatic(incomingUBX->cls, incomingUBX->id))
       startingSpot = 0;
@@ -1909,8 +1909,9 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
       if ((incomingUBX->counter - 4) >= startingSpot) {
         // Check to see if we have room for this byte
         if (((incomingUBX->counter - 4) - startingSpot) <
-            maximum_payload_size) // If counter = 208, starting spot = 200,
-                                  // we're good to record.
+            maximum_payload_size) // If counter = 208, starting
+                                  // spot = 200, we're good to
+                                  // record.
         {
           incomingUBX->payload[(incomingUBX->counter - 4) - startingSpot] =
               incoming; // Store this byte into payload array
@@ -1921,22 +1922,19 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
     }
   }
 
-  // incomingUBX->counter should never reach maximum_payload_size + class + id +
-  // len[2] + checksum[2]
+  // incomingUBX->counter should never reach
+  // maximum_payload_size + class + id + len[2] + checksum[2]
   if (overrun || ((incomingUBX->counter == maximum_payload_size + 6) &&
                   (ignoreThisPayload == false))) {
     // Something has gone very wrong
-    currentSentence =
-        NONE; // Reset the sentence to being looking for a new start char
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-    {
+    currentSentence = NONE; // Reset the sentence to being
+                            // looking for a new start char
+    if (isDebugLimited()) {
       if (overrun)
         _debugSerial->print(F("processUBX: buffer overrun detected!"));
       else
-        _debugSerial->print(
-            F("processUBX: counter hit maximum_payload_size + 6!"));
+        _debugSerial->print(F("processUBX: counter hit "
+                              "maximum_payload_size + 6!"));
       _debugSerial->print(F(" activePacketBuffer: "));
       _debugSerial->print(activePacketBuffer);
       _debugSerial->print(F(" maximum_payload_size: "));
@@ -1948,14 +1946,14 @@ void SFE_UBLOX_GNSS::processUBX(uint8_t incoming, ubxPacket *incomingUBX,
   incomingUBX->counter++;
 }
 
-// Once a packet has been received and validated, identify this packet's
-// class/id and update internal flags
+// Once a packet has been received and validated, identify this
+// packet's class/id and update internal flags
 void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
   switch (msg->cls) {
   case UBX_CLASS_NAV:
     if (msg->id == UBX_NAV_POSECEF && msg->len == UBX_NAV_POSECEF_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVPOSECEF != NULL) {
         packetUBXNAVPOSECEF->data.iTOW = extractLong(msg, 0);
         packetUBXNAVPOSECEF->data.ecefX = extractSignedLong(msg, 4);
@@ -1968,7 +1966,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXNAVPOSECEF->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             &&
             (packetUBXNAVPOSECEF->automaticFlags.flags.bits.callbackCopyValid ==
              false)) // AND the data is stale
@@ -1980,14 +1979,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
               true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVPOSECEF->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_STATUS && msg->len == UBX_NAV_STATUS_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVSTATUS != NULL) {
         packetUBXNAVSTATUS->data.iTOW = extractLong(msg, 0);
         packetUBXNAVSTATUS->data.gpsFix = extractByte(msg, 4);
@@ -2002,7 +2002,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXNAVSTATUS->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             &&
             (packetUBXNAVSTATUS->automaticFlags.flags.bits.callbackCopyValid ==
              false)) // AND the data is stale
@@ -2013,14 +2014,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
               true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVSTATUS->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_DOP && msg->len == UBX_NAV_DOP_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVDOP != NULL) {
         packetUBXNAVDOP->data.iTOW = extractLong(msg, 0);
         packetUBXNAVDOP->data.gDOP = extractInt(msg, 4);
@@ -2035,8 +2037,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXNAVDOP->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXNAVDOP->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXNAVDOP->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXNAVDOP->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2045,14 +2047,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXNAVDOP->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVDOP->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_ATT && msg->len == UBX_NAV_ATT_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVATT != NULL) {
         packetUBXNAVATT->data.iTOW = extractLong(msg, 0);
         packetUBXNAVATT->data.version = extractByte(msg, 4);
@@ -2067,8 +2070,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXNAVATT->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXNAVATT->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXNAVATT->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXNAVATT->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2077,15 +2080,16 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXNAVATT->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVATT->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_PVT &&
                (msg->len == UBX_NAV_PVT_LEN || msg->len == UBX_7_NAV_PVT_LEN)) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVPVT != NULL) {
         packetUBXNAVPVT->data.iTOW = extractLong(msg, 0);
         packetUBXNAVPVT->data.year = extractInt(msg, 4);
@@ -2128,8 +2132,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXNAVPVT->moduleQueried.moduleQueried2.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXNAVPVT->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXNAVPVT->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXNAVPVT->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2138,14 +2142,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXNAVPVT->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVPVT->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_ODO && msg->len == UBX_NAV_ODO_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVODO != NULL) {
         packetUBXNAVODO->data.version = extractByte(msg, 0);
         packetUBXNAVODO->data.iTOW = extractLong(msg, 4);
@@ -2157,8 +2162,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXNAVODO->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXNAVODO->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXNAVODO->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXNAVODO->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2167,14 +2172,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXNAVODO->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVODO->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_VELECEF && msg->len == UBX_NAV_VELECEF_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVVELECEF != NULL) {
         packetUBXNAVVELECEF->data.iTOW = extractLong(msg, 0);
         packetUBXNAVVELECEF->data.ecefVX = extractSignedLong(msg, 4);
@@ -2187,7 +2193,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXNAVVELECEF->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             &&
             (packetUBXNAVVELECEF->automaticFlags.flags.bits.callbackCopyValid ==
              false)) // AND the data is stale
@@ -2199,14 +2206,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
               true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVVELECEF->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_VELNED && msg->len == UBX_NAV_VELNED_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVVELNED != NULL) {
         packetUBXNAVVELNED->data.iTOW = extractLong(msg, 0);
         packetUBXNAVVELNED->data.velN = extractSignedLong(msg, 4);
@@ -2223,7 +2231,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXNAVVELNED->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             &&
             (packetUBXNAVVELNED->automaticFlags.flags.bits.callbackCopyValid ==
              false)) // AND the data is stale
@@ -2234,15 +2243,16 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
               true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVVELNED->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_HPPOSECEF &&
                msg->len == UBX_NAV_HPPOSECEF_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVHPPOSECEF != NULL) {
         packetUBXNAVHPPOSECEF->data.version = extractByte(msg, 0);
         packetUBXNAVHPPOSECEF->data.iTOW = extractLong(msg, 4);
@@ -2260,7 +2270,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXNAVHPPOSECEF->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             && (packetUBXNAVHPPOSECEF->automaticFlags.flags.bits
                     .callbackCopyValid == false)) // AND the data is stale
         {
@@ -2271,15 +2282,16 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
               true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_HPPOSLLH &&
                msg->len == UBX_NAV_HPPOSLLH_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVHPPOSLLH != NULL) {
         packetUBXNAVHPPOSLLH->data.version = extractByte(msg, 0);
         packetUBXNAVHPPOSLLH->data.flags.all = extractByte(msg, 3);
@@ -2300,7 +2312,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXNAVHPPOSLLH->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             && (packetUBXNAVHPPOSLLH->automaticFlags.flags.bits
                     .callbackCopyValid == false)) // AND the data is stale
         {
@@ -2311,14 +2324,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
               true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_CLOCK && msg->len == UBX_NAV_CLOCK_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVCLOCK != NULL) {
         packetUBXNAVCLOCK->data.iTOW = extractLong(msg, 0);
         packetUBXNAVCLOCK->data.clkB = extractSignedLong(msg, 4);
@@ -2331,7 +2345,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXNAVCLOCK->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             &&
             (packetUBXNAVCLOCK->automaticFlags.flags.bits.callbackCopyValid ==
              false)) // AND the data is stale
@@ -2341,14 +2356,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXNAVCLOCK->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVCLOCK->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_NAV_TIMELS && msg->len == UBX_NAV_TIMELS_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVTIMELS != NULL) {
         packetUBXNAVTIMELS->data.iTOW = extractLong(msg, 0);
         packetUBXNAVTIMELS->data.version = extractByte(msg, 4);
@@ -2365,8 +2381,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXNAVTIMELS->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
       }
     } else if (msg->id == UBX_NAV_SVIN && msg->len == UBX_NAV_SVIN_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVSVIN != NULL) {
         packetUBXNAVSVIN->data.version = extractByte(msg, 0);
         packetUBXNAVSVIN->data.iTOW = extractLong(msg, 4);
@@ -2388,13 +2404,13 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
     } else if (msg->id == UBX_NAV_RELPOSNED &&
                ((msg->len == UBX_NAV_RELPOSNED_LEN) ||
                 (msg->len == UBX_NAV_RELPOSNED_LEN_F9))) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXNAVRELPOSNED != NULL) {
         // Note:
         //   RELPOSNED on the M8 is only 40 bytes long
-        //   RELPOSNED on the F9 is 64 bytes long and contains much more
-        //   information
+        //   RELPOSNED on the F9 is 64 bytes long and contains
+        //   much more information
 
         packetUBXNAVRELPOSNED->data.version = extractByte(msg, 0);
         packetUBXNAVRELPOSNED->data.refStationId = extractInt(msg, 2);
@@ -2404,18 +2420,21 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXNAVRELPOSNED->data.relPosD = extractSignedLong(msg, 16);
 
         if (msg->len == UBX_NAV_RELPOSNED_LEN) {
-          // The M8 version does not contain relPosLength or relPosHeading
+          // The M8 version does not contain relPosLength or
+          // relPosHeading
           packetUBXNAVRELPOSNED->data.relPosLength = 0;
           packetUBXNAVRELPOSNED->data.relPosHeading = 0;
           packetUBXNAVRELPOSNED->data.relPosHPN = extractSignedChar(msg, 20);
           packetUBXNAVRELPOSNED->data.relPosHPE = extractSignedChar(msg, 21);
           packetUBXNAVRELPOSNED->data.relPosHPD = extractSignedChar(msg, 22);
           packetUBXNAVRELPOSNED->data.relPosHPLength =
-              0; // The M8 version does not contain relPosHPLength
+              0; // The M8 version does not contain
+                 // relPosHPLength
           packetUBXNAVRELPOSNED->data.accN = extractLong(msg, 24);
           packetUBXNAVRELPOSNED->data.accE = extractLong(msg, 28);
           packetUBXNAVRELPOSNED->data.accD = extractLong(msg, 32);
-          // The M8 version does not contain accLength or accHeading
+          // The M8 version does not contain accLength or
+          // accHeading
           packetUBXNAVRELPOSNED->data.accLength = 0;
           packetUBXNAVRELPOSNED->data.accHeading = 0;
           packetUBXNAVRELPOSNED->data.flags.all = extractLong(msg, 36);
@@ -2441,7 +2460,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXNAVRELPOSNED->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             && (packetUBXNAVRELPOSNED->automaticFlags.flags.bits
                     .callbackCopyValid == false)) // AND the data is stale
         {
@@ -2452,7 +2472,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
               true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXNAVRELPOSNED->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
@@ -2465,8 +2486,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
     // Note: on protocol version 17: numWords is (0..16)
     //       on protocol version 18+: numWords is (0..10)
     {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXRXMSFRBX != NULL) {
         packetUBXRXMSFRBX->data.gnssId = extractByte(msg, 0);
         packetUBXRXMSFRBX->data.svId = extractByte(msg, 1);
@@ -2487,7 +2508,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXRXMSFRBX->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             &&
             (packetUBXRXMSFRBX->automaticFlags.flags.bits.callbackCopyValid ==
              false)) // AND the data is stale
@@ -2497,7 +2519,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXRXMSFRBX->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXRXMSFRBX->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
@@ -2505,8 +2528,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
     } else if (msg->id == UBX_RXM_RAWX)
     // Note: length is variable
     {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXRXMRAWX != NULL) {
         for (uint8_t i = 0; i < 8; i++) {
           packetUBXRXMRAWX->data.header.rcvTow[i] = extractByte(msg, i);
@@ -2556,7 +2579,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXRXMRAWX->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             && (packetUBXRXMRAWX->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2566,7 +2590,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXRXMRAWX->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXRXMRAWX->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
@@ -2575,8 +2600,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
     break;
   case UBX_CLASS_CFG:
     if (msg->id == UBX_CFG_RATE && msg->len == UBX_CFG_RATE_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXCFGRATE != NULL) {
         packetUBXCFGRATE->data.measRate = extractInt(msg, 0);
         packetUBXCFGRATE->data.navRate = extractInt(msg, 2);
@@ -2589,8 +2614,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
     break;
   case UBX_CLASS_TIM:
     if (msg->id == UBX_TIM_TM2 && msg->len == UBX_TIM_TM2_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXTIMTM2 != NULL) {
         packetUBXTIMTM2->data.ch = extractByte(msg, 0);
         packetUBXTIMTM2->data.flags.all = extractByte(msg, 1);
@@ -2607,8 +2632,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXTIMTM2->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXTIMTM2->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXTIMTM2->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXTIMTM2->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2617,7 +2642,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXTIMTM2->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXTIMTM2->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
@@ -2626,8 +2652,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
     break;
   case UBX_CLASS_ESF:
     if (msg->id == UBX_ESF_ALG && msg->len == UBX_ESF_ALG_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXESFALG != NULL) {
         packetUBXESFALG->data.iTOW = extractLong(msg, 0);
         packetUBXESFALG->data.version = extractByte(msg, 4);
@@ -2641,8 +2667,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXESFALG->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXESFALG->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXESFALG->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXESFALG->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2651,14 +2677,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXESFALG->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXESFALG->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_ESF_INS && msg->len == UBX_ESF_INS_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXESFINS != NULL) {
         packetUBXESFINS->data.bitfield0.all = extractLong(msg, 0);
         packetUBXESFINS->data.iTOW = extractLong(msg, 8);
@@ -2673,8 +2700,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXESFINS->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXESFINS->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXESFINS->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXESFINS->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2684,14 +2711,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXESFINS->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXESFINS->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_ESF_MEAS) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXESFMEAS != NULL) {
         packetUBXESFMEAS->data.timeTag = extractLong(msg, 0);
         packetUBXESFMEAS->data.flags.all = extractInt(msg, 4);
@@ -2714,7 +2742,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXESFMEAS->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             && (packetUBXESFMEAS->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2723,14 +2752,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXESFMEAS->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXESFMEAS->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_ESF_RAW) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXESFRAW != NULL) {
         for (uint16_t i = 0; (i < DEF_NUM_SENS) && ((i * 8) < (msg->len - 4));
              i++) {
@@ -2743,8 +2773,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXESFRAW->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXESFRAW->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXESFRAW->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXESFRAW->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2754,14 +2784,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXESFRAW->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXESFRAW->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_ESF_STATUS) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXESFSTATUS != NULL) {
         packetUBXESFSTATUS->data.iTOW = extractLong(msg, 0);
         packetUBXESFSTATUS->data.version = extractByte(msg, 4);
@@ -2786,7 +2817,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
 
         // Check if we need to copy the data for the callback
         if ((packetUBXESFSTATUS->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+             NULL) // If RAM has been allocated for the copy of
+                   // the data
             &&
             (packetUBXESFSTATUS->automaticFlags.flags.bits.callbackCopyValid ==
              false)) // AND the data is stale
@@ -2797,7 +2829,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
               true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXESFSTATUS->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
@@ -2806,8 +2839,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
     break;
   case UBX_CLASS_HNR:
     if (msg->id == UBX_HNR_PVT && msg->len == UBX_HNR_PVT_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXHNRPVT != NULL) {
         packetUBXHNRPVT->data.iTOW = extractLong(msg, 0);
         packetUBXHNRPVT->data.year = extractInt(msg, 4);
@@ -2837,8 +2870,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXHNRPVT->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXHNRPVT->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXHNRPVT->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXHNRPVT->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2847,14 +2880,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXHNRPVT->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXHNRPVT->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_HNR_ATT && msg->len == UBX_HNR_ATT_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXHNRATT != NULL) {
         packetUBXHNRATT->data.iTOW = extractLong(msg, 0);
         packetUBXHNRATT->data.version = extractByte(msg, 4);
@@ -2869,8 +2903,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXHNRATT->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXHNRATT->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXHNRATT->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXHNRATT->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2879,14 +2913,15 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXHNRATT->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXHNRATT->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
       }
     } else if (msg->id == UBX_HNR_INS && msg->len == UBX_HNR_INS_LEN) {
-      // Parse various byte fields into storage - but only if we have memory
-      // allocated for it
+      // Parse various byte fields into storage - but only if we
+      // have memory allocated for it
       if (packetUBXHNRINS != NULL) {
         packetUBXHNRINS->data.bitfield0.all = extractLong(msg, 0);
         packetUBXHNRINS->data.iTOW = extractLong(msg, 8);
@@ -2901,8 +2936,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
         packetUBXHNRINS->moduleQueried.moduleQueried.all = 0xFFFFFFFF;
 
         // Check if we need to copy the data for the callback
-        if ((packetUBXHNRINS->callbackData !=
-             NULL) // If RAM has been allocated for the copy of the data
+        if ((packetUBXHNRINS->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
             && (packetUBXHNRINS->automaticFlags.flags.bits.callbackCopyValid ==
                 false)) // AND the data is stale
         {
@@ -2912,7 +2947,8 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
           packetUBXHNRINS->automaticFlags.flags.bits.callbackCopyValid = true;
         }
 
-        // Check if we need to copy the data into the file buffer
+        // Check if we need to copy the data into the file
+        // buffer
         if (packetUBXHNRINS->automaticFlags.flags.bits.addToFileBuffer) {
           storePacket(msg);
         }
@@ -2922,8 +2958,9 @@ void SFE_UBLOX_GNSS::processUBXpacket(ubxPacket *msg) {
   }
 }
 
-// Given a message, calc and store the two byte "8-Bit Fletcher" checksum over
-// the entirety of the message This is called before we send a command message
+// Given a message, calc and store the two byte "8-Bit Fletcher"
+// checksum over the entirety of the message This is called
+// before we send a command message
 void SFE_UBLOX_GNSS::calcChecksum(ubxPacket *msg) {
   msg->checksumA = 0;
   msg->checksumB = 0;
@@ -2946,14 +2983,15 @@ void SFE_UBLOX_GNSS::calcChecksum(ubxPacket *msg) {
   }
 }
 
-// Given a message and a byte, add to rolling "8-Bit Fletcher" checksum
-// This is used when receiving messages from module
+// Given a message and a byte, add to rolling "8-Bit Fletcher"
+// checksum This is used when receiving messages from module
 void SFE_UBLOX_GNSS::addToChecksum(uint8_t incoming) {
   rollingChecksumA += incoming;
   rollingChecksumB += rollingChecksumA;
 }
 
-// Given a packet and payload, send everything including CRC bytes via I2C port
+// Given a packet and payload, send everything including CRC
+// bytes via I2C port
 sfe_ublox_status_e SFE_UBLOX_GNSS::sendCommand(ubxPacket *outgoingUBX,
                                                uint16_t maxWait,
                                                bool expectACKonly) {
@@ -2961,7 +2999,7 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::sendCommand(ubxPacket *outgoingUBX,
 
   calcChecksum(outgoingUBX); // Sets checksum A and B bytes of the packet
 
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("\nSending: "));
     printPacket(outgoingUBX, true); // Always print payload
   }
@@ -2970,7 +3008,7 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::sendCommand(ubxPacket *outgoingUBX,
     retVal = sendI2cCommand(outgoingUBX, maxWait);
     if (retVal != SFE_UBLOX_STATUS_SUCCESS) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-      if (_printDebug == true) {
+      if (isDebugDetailed()) {
         _debugSerial->println(F("Send I2C Command failed"));
       }
 #endif
@@ -2983,10 +3021,11 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::sendCommand(ubxPacket *outgoingUBX,
   }
 
   if (maxWait > 0) {
-    // Depending on what we just sent, either we need to look for an ACK or not
+    // Depending on what we just sent, either we need to look
+    // for an ACK or not
     if ((outgoingUBX->cls == UBX_CLASS_CFG) || (expectACKonly == true)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-      if (_printDebug == true) {
+      if (isDebugDetailed()) {
         _debugSerial->println(F("sendCommand: Waiting for ACK response"));
       }
 #endif
@@ -2995,7 +3034,7 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::sendCommand(ubxPacket *outgoingUBX,
                              maxWait); // Wait for Ack response
     } else {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-      if (_printDebug == true) {
+      if (isDebugDetailed()) {
         _debugSerial->println(F("sendCommand: Waiting for No ACK response"));
       }
 #endif
@@ -3012,33 +3051,38 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::sendI2cCommand(ubxPacket *outgoingUBX,
                                                   uint16_t maxWait) {
   // Point at 0xFF data register
   _i2cPort->beginTransmission(
-      (uint8_t)_gpsI2Caddress); // There is no register to write to, we just
-                                // begin writing data bytes
+      (uint8_t)_gpsI2Caddress); // There is no register to write to,
+                                // we just begin writing data bytes
   _i2cPort->write(0xFF);
   if (_i2cPort->endTransmission(false) != 0)    // Don't release bus
-    return (SFE_UBLOX_STATUS_I2C_COMM_FAILURE); // Sensor did not ACK
+    return (SFE_UBLOX_STATUS_I2C_COMM_FAILURE); // Sensor did
+                                                // not ACK
 
   // Write header bytes
   _i2cPort->beginTransmission(
-      (uint8_t)_gpsI2Caddress); // There is no register to write to, we just
-                                // begin writing data bytes
-  _i2cPort->write(UBX_SYNCH_1); //μ - oh ublox, you're funny. I will call you
-                                //micro-blox from now on.
+      (uint8_t)_gpsI2Caddress); // There is no register to write to,
+                                // we just begin writing data bytes
+  _i2cPort->write(UBX_SYNCH_1); //μ - oh ublox, you're funny. I
+                                // will call you
+                                // micro-blox from now on.
   _i2cPort->write(UBX_SYNCH_2); // b
   _i2cPort->write(outgoingUBX->cls);
   _i2cPort->write(outgoingUBX->id);
   _i2cPort->write(outgoingUBX->len & 0xFF);     // LSB
   _i2cPort->write(outgoingUBX->len >> 8);       // MSB
   if (_i2cPort->endTransmission(false) != 0)    // Do not release bus
-    return (SFE_UBLOX_STATUS_I2C_COMM_FAILURE); // Sensor did not ACK
+    return (SFE_UBLOX_STATUS_I2C_COMM_FAILURE); // Sensor did
+                                                // not ACK
 
   // Write payload. Limit the sends into 32 byte chunks
   // This code based on ublox:
   // https://forum.u-blox.com/index.php/20528/how-to-use-i2c-to-get-the-nmea-frames
   uint16_t bytesToSend = outgoingUBX->len;
 
-  //"The number of data bytes must be at least 2 to properly distinguish
-  // from the write access to set the address counter in random read accesses."
+  //"The number of data bytes must be at least 2 to properly
+  // distinguish
+  // from the write access to set the address counter in random
+  // read accesses."
   uint16_t startSpot = 0;
   while (bytesToSend > 1) {
     uint8_t len = bytesToSend;
@@ -3049,11 +3093,12 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::sendI2cCommand(ubxPacket *outgoingUBX,
 
     for (uint16_t x = 0; x < len; x++)
       _i2cPort->write(
-          outgoingUBX->payload[startSpot +
-                               x]); // Write a portion of the payload to the bus
+          outgoingUBX->payload[startSpot + x]); // Write a portion of the
+                                                // payload to the bus
 
     if (_i2cPort->endTransmission(false) != 0)    // Don't release bus
-      return (SFE_UBLOX_STATUS_I2C_COMM_FAILURE); // Sensor did not ACK
+      return (SFE_UBLOX_STATUS_I2C_COMM_FAILURE); // Sensor did
+                                                  // not ACK
 
     startSpot += len; // Move the pointer forward
     bytesToSend -= len;
@@ -3070,17 +3115,19 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::sendI2cCommand(ubxPacket *outgoingUBX,
 
   // All done transmitting bytes. Release bus.
   if (_i2cPort->endTransmission() != 0)
-    return (SFE_UBLOX_STATUS_I2C_COMM_FAILURE); // Sensor did not ACK
+    return (SFE_UBLOX_STATUS_I2C_COMM_FAILURE); // Sensor did
+                                                // not ACK
 
   return (SFE_UBLOX_STATUS_SUCCESS);
 }
 
-// Given a packet and payload, send everything including CRC bytesA via Serial
-// port
+// Given a packet and payload, send everything including CRC
+// bytesA via Serial port
 void SFE_UBLOX_GNSS::sendSerialCommand(ubxPacket *outgoingUBX) {
   // Write header bytes
-  _serialPort->write(UBX_SYNCH_1); //μ - oh ublox, you're funny. I will call you
-                                   //micro-blox from now on.
+  _serialPort->write(UBX_SYNCH_1); //μ - oh ublox, you're funny.
+                                   // I will call you
+                                   // micro-blox from now on.
   _serialPort->write(UBX_SYNCH_2); // b
   _serialPort->write(outgoingUBX->cls);
   _serialPort->write(outgoingUBX->id);
@@ -3097,9 +3144,9 @@ void SFE_UBLOX_GNSS::sendSerialCommand(ubxPacket *outgoingUBX) {
   _serialPort->write(outgoingUBX->checksumB);
 }
 
-// Transfer a byte to SPI. Also capture any bytes received from the UBLOX device
-// during sending and capture them in a small buffer so that they can be
-// processed later with process
+// Transfer a byte to SPI. Also capture any bytes received from
+// the UBLOX device during sending and capture them in a small
+// buffer so that they can be processed later with process
 void SFE_UBLOX_GNSS::spiTransfer(uint8_t byteToTransfer) {
   uint8_t returnedByte = _spiPort->transfer(byteToTransfer);
   if ((spiBufferIndex < getSpiTransactionSize()) &&
@@ -3111,13 +3158,10 @@ void SFE_UBLOX_GNSS::spiTransfer(uint8_t byteToTransfer) {
 
 // Send a command via SPI
 void SFE_UBLOX_GNSS::sendSpiCommand(ubxPacket *outgoingUBX) {
-  if(!spiBuffer) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->print(
-          F("sendSpiCommand: no memory allocation for SPI Buffer!"));
+  if (!spiBuffer) {
+    if (isDebugLimited()) {
+      _debugSerial->print(F("sendSpiCommand: no memory "
+                            "allocation for SPI Buffer!"));
     }
     return;
   }
@@ -3128,8 +3172,9 @@ void SFE_UBLOX_GNSS::sendSpiCommand(ubxPacket *outgoingUBX) {
   _spiPort->beginTransaction(SPISettings(_spiSpeed, MSBFIRST, SPI_MODE0));
   digitalWrite(_csPin, LOW);
   // Write header bytes
-  spiTransfer(UBX_SYNCH_1); //μ - oh ublox, you're funny. I will call you
-                            //micro-blox from now on.
+  spiTransfer(UBX_SYNCH_1); //μ - oh ublox, you're funny. I will
+                            // call you
+                            // micro-blox from now on.
   spiTransfer(UBX_SYNCH_2); // b
 
   spiTransfer(outgoingUBX->cls);
@@ -3184,7 +3229,7 @@ void SFE_UBLOX_GNSS::sendSpiCommand(ubxPacket *outgoingUBX) {
 // Pretty prints the current ubxPacket
 void SFE_UBLOX_GNSS::printPacket(ubxPacket *packet, bool alwaysPrintPayload) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("CLS:"));
     if (packet->cls == UBX_CLASS_NAV) // 1
       _debugSerial->print(F("NAV"));
@@ -3214,8 +3259,9 @@ void SFE_UBLOX_GNSS::printPacket(ubxPacket *packet, bool alwaysPrintPayload) {
     _debugSerial->print(F(" Len: 0x"));
     _debugSerial->print(packet->len, HEX);
 
-    // Only print the payload is ignoreThisPayload is false otherwise
-    // we could be printing gibberish from beyond the end of packetBuf
+    // Only print the payload is ignoreThisPayload is false
+    // otherwise we could be printing gibberish from beyond the
+    // end of packetBuf
     if ((alwaysPrintPayload == true) || (ignoreThisPayload == false)) {
       _debugSerial->print(F(" Payload:"));
 
@@ -3231,151 +3277,181 @@ void SFE_UBLOX_GNSS::printPacket(ubxPacket *packet, bool alwaysPrintPayload) {
 #endif
 }
 
-// When messages from the class CFG are sent to the receiver, the receiver will
-// send an "acknowledge"(UBX - ACK - ACK) or a
-//"not acknowledge"(UBX-ACK-NAK) message back to the sender, depending on
-//whether or not the message was processed correctly.
-// Some messages from other classes also use the same acknowledgement mechanism.
+// When messages from the class CFG are sent to the receiver,
+// the receiver will send an "acknowledge"(UBX - ACK - ACK) or a
+//"not acknowledge"(UBX-ACK-NAK) message back to the sender,
+// depending on
+// whether or not the message was processed correctly.
+// Some messages from other classes also use the same
+// acknowledgement mechanism.
 
-// When we poll or get a setting, we will receive _both_ a config packet and an
-// ACK If the poll or get request is not valid, we will receive _only_ a NACK
+// When we poll or get a setting, we will receive _both_ a
+// config packet and an ACK If the poll or get request is not
+// valid, we will receive _only_ a NACK
 
-// If we are trying to get or poll a setting, then packetCfg.len will be 0 or 1
-// when the packetCfg is _sent_. If we poll the setting for a particular port
-// using UBX-CFG-PRT then .len will be 1 initially For all other gets or polls,
-// .len will be 0 initially
-//(It would be possible for .len to be 2 _if_ we were using UBX-CFG-MSG to poll
-//the settings for a particular message - but we don't use that (currently))
+// If we are trying to get or poll a setting, then packetCfg.len
+// will be 0 or 1 when the packetCfg is _sent_. If we poll the
+// setting for a particular port using UBX-CFG-PRT then .len
+// will be 1 initially For all other gets or polls, .len will be
+// 0 initially
+//(It would be possible for .len to be 2 _if_ we were using
+// UBX-CFG-MSG to poll
+// the settings for a particular message - but we don't use that
+// (currently))
 
-// If the get or poll _fails_, i.e. is NACK'd, then packetCfg.len could still be
-// 0 or 1 after the NACK is received But if the get or poll is ACK'd, then
-// packetCfg.len will have been updated by the incoming data and will always be
-// at least 2
+// If the get or poll _fails_, i.e. is NACK'd, then
+// packetCfg.len could still be 0 or 1 after the NACK is
+// received But if the get or poll is ACK'd, then packetCfg.len
+// will have been updated by the incoming data and will always
+// be at least 2
 
-// If we are going to set the value for a setting, then packetCfg.len will be at
-// least 3 when the packetCfg is _sent_.
-//(UBX-CFG-MSG appears to have the shortest set length of 3 bytes)
+// If we are going to set the value for a setting, then
+// packetCfg.len will be at least 3 when the packetCfg is
+// _sent_.
+//(UBX-CFG-MSG appears to have the shortest set length of 3
+// bytes)
 
-// We need to think carefully about how interleaved PVT packets affect things.
-// It is entirely possible that our packetCfg and packetAck were received
-// successfully but while we are still in the "if (checkUblox() == true)" loop a
-// PVT packet is processed or _starts_ to arrive (remember that Serial data can
-// arrive very slowly).
+// We need to think carefully about how interleaved PVT packets
+// affect things. It is entirely possible that our packetCfg and
+// packetAck were received successfully but while we are still
+// in the "if (checkUblox() == true)" loop a PVT packet is
+// processed or _starts_ to arrive (remember that Serial data
+// can arrive very slowly).
 
-// Returns SFE_UBLOX_STATUS_DATA_RECEIVED if we got an ACK and a valid packetCfg
-// (module is responding with register content) Returns
-// SFE_UBLOX_STATUS_DATA_SENT if we got an ACK and no packetCfg (no valid
-// packetCfg needed, module absorbs new register data) Returns
-// SFE_UBLOX_STATUS_FAIL if something very bad happens (e.g. a double checksum
-// failure) Returns SFE_UBLOX_STATUS_COMMAND_NACK if the packet was
-// not-acknowledged (NACK) Returns SFE_UBLOX_STATUS_CRC_FAIL if we had a
-// checksum failure Returns SFE_UBLOX_STATUS_TIMEOUT if we timed out Returns
-// SFE_UBLOX_STATUS_DATA_OVERWRITTEN if we got an ACK and a valid packetCfg but
-// that the packetCfg has been
-//  or is currently being overwritten (remember that Serial data can arrive very
-//  slowly)
+// Returns SFE_UBLOX_STATUS_DATA_RECEIVED if we got an ACK and a
+// valid packetCfg (module is responding with register content)
+// Returns SFE_UBLOX_STATUS_DATA_SENT if we got an ACK and no
+// packetCfg (no valid packetCfg needed, module absorbs new
+// register data) Returns SFE_UBLOX_STATUS_FAIL if something
+// very bad happens (e.g. a double checksum failure) Returns
+// SFE_UBLOX_STATUS_COMMAND_NACK if the packet was
+// not-acknowledged (NACK) Returns SFE_UBLOX_STATUS_CRC_FAIL if
+// we had a checksum failure Returns SFE_UBLOX_STATUS_TIMEOUT if
+// we timed out Returns SFE_UBLOX_STATUS_DATA_OVERWRITTEN if we
+// got an ACK and a valid packetCfg but that the packetCfg has
+// been
+//  or is currently being overwritten (remember that Serial data
+//  can arrive very slowly)
 sfe_ublox_status_e SFE_UBLOX_GNSS::waitForACKResponse(ubxPacket *outgoingUBX,
                                                       uint8_t requestedClass,
                                                       uint8_t requestedID,
                                                       uint16_t maxTime) {
-  outgoingUBX->valid =
-      SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go VALID (or
-                                             // NOT_VALID) when we receive a
-                                             // response to the packet we sent
+  outgoingUBX->valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go
+                                                              // VALID (or
+                                                              // NOT_VALID) when
+                                                              // we receive a
+                                                              // response to the
+                                                              // packet we sent
   packetAck.valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetBuf.valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetAuto.valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   outgoingUBX->classAndIDmatch =
-      SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go VALID (or
-                                             // NOT_VALID) when we receive a
-                                             // packet that matches the
-                                             // requested class and ID
+      SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go
+                                             // VALID (or
+                                             // NOT_VALID) when
+                                             // we receive a
+                                             // packet that
+                                             // matches the
+                                             // requested class
+                                             // and ID
   packetAck.classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetBuf.classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetAuto.classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
 
   unsigned long startTime = millis();
   while (millis() - startTime < maxTime) {
-    if (checkUbloxInternal(outgoingUBX, requestedClass, requestedID) ==
-        true) // See if new data is available. Process bytes as they come in.
+    if (checkUbloxInternal(outgoingUBX, requestedClass,
+                           requestedID) ==
+        true) // See if new data is available. Process bytes as
+              // they come in.
     {
-      // If both the outgoingUBX->classAndIDmatch and packetAck.classAndIDmatch
-      // are VALID and outgoingUBX->valid is _still_ VALID and the class and ID
-      // _still_ match then we can be confident that the data in outgoingUBX is
-      // valid
+      // If both the outgoingUBX->classAndIDmatch and
+      // packetAck.classAndIDmatch are VALID and
+      // outgoingUBX->valid is _still_ VALID and the class and
+      // ID _still_ match then we can be confident that the data
+      // in outgoingUBX is valid
       if ((outgoingUBX->classAndIDmatch == SFE_UBLOX_PACKET_VALIDITY_VALID) &&
           (packetAck.classAndIDmatch == SFE_UBLOX_PACKET_VALIDITY_VALID) &&
           (outgoingUBX->valid == SFE_UBLOX_PACKET_VALIDITY_VALID) &&
           (outgoingUBX->cls == requestedClass) &&
           (outgoingUBX->id == requestedID)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
-          _debugSerial->print(F(
-              "waitForACKResponse: valid data and valid ACK received after "));
+        if (isDebugDetailed()) {
+          _debugSerial->print(F("waitForACKResponse: valid data and valid ACK "
+                                "received after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (SFE_UBLOX_STATUS_DATA_RECEIVED); // We received valid data and a
+        return (SFE_UBLOX_STATUS_DATA_RECEIVED); // We received
+                                                 // valid data and a
                                                  // correct ACK!
       }
 
-      // We can be confident that the data packet (if we are going to get one)
-      // will always arrive before the matching ACK. So if we sent a config
-      // packet which only produces an ACK then outgoingUBX->classAndIDmatch
-      // will be NOT_DEFINED and the packetAck.classAndIDmatch will VALID. We
-      // should not check outgoingUBX->valid, outgoingUBX->cls or
-      // outgoingUBX->id as these may have been changed by an automatic packet.
+      // We can be confident that the data packet (if we are
+      // going to get one) will always arrive before the
+      // matching ACK. So if we sent a config packet which only
+      // produces an ACK then outgoingUBX->classAndIDmatch will
+      // be NOT_DEFINED and the packetAck.classAndIDmatch will
+      // VALID. We should not check outgoingUBX->valid,
+      // outgoingUBX->cls or outgoingUBX->id as these may have
+      // been changed by an automatic packet.
       else if ((outgoingUBX->classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED) &&
                (packetAck.classAndIDmatch == SFE_UBLOX_PACKET_VALIDITY_VALID)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
-          _debugSerial->print(
-              F("waitForACKResponse: no data and valid ACK after "));
+        if (isDebugDetailed()) {
+          _debugSerial->print(F("waitForACKResponse: no data "
+                                "and valid ACK after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (SFE_UBLOX_STATUS_DATA_SENT); // We got an ACK but no data...
+        return (SFE_UBLOX_STATUS_DATA_SENT); // We got an ACK
+                                             // but no data...
       }
 
-      // If both the outgoingUBX->classAndIDmatch and packetAck.classAndIDmatch
-      // are VALID but the outgoingUBX->cls or ID no longer match then we can be
-      // confident that we had valid data but it has been or is currently being
-      // overwritten by an automatic packet (e.g. PVT). If (e.g.) a PVT packet
-      // is _being_ received: outgoingUBX->valid will be NOT_DEFINED If (e.g.) a
-      // PVT packet _has been_ received: outgoingUBX->valid will be VALID (or
-      // just possibly NOT_VALID) So we cannot use outgoingUBX->valid as part of
-      // this check. Note: the addition of packetBuf should make this check
-      // redundant!
+      // If both the outgoingUBX->classAndIDmatch and
+      // packetAck.classAndIDmatch are VALID but the
+      // outgoingUBX->cls or ID no longer match then we can be
+      // confident that we had valid data but it has been or is
+      // currently being overwritten by an automatic packet
+      // (e.g. PVT). If (e.g.) a PVT packet is _being_ received:
+      // outgoingUBX->valid will be NOT_DEFINED If (e.g.) a PVT
+      // packet _has been_ received: outgoingUBX->valid will be
+      // VALID (or just possibly NOT_VALID) So we cannot use
+      // outgoingUBX->valid as part of this check. Note: the
+      // addition of packetBuf should make this check redundant!
       else if ((outgoingUBX->classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_VALID) &&
                (packetAck.classAndIDmatch == SFE_UBLOX_PACKET_VALIDITY_VALID) &&
                ((outgoingUBX->cls != requestedClass) ||
                 (outgoingUBX->id != requestedID))) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
-          _debugSerial->print(
-              F("waitForACKResponse: data being OVERWRITTEN after "));
+        if (isDebugDetailed()) {
+          _debugSerial->print(F("waitForACKResponse: data "
+                                "being OVERWRITTEN after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (
-            SFE_UBLOX_STATUS_DATA_OVERWRITTEN); // Data was valid but has been
-                                                // or is being overwritten
+        return (SFE_UBLOX_STATUS_DATA_OVERWRITTEN); // Data was
+                                                    // valid but has
+                                                    // been or is
+                                                    // being
+                                                    // overwritten
       }
 
-      // If packetAck.classAndIDmatch is VALID but both outgoingUBX->valid and
-      // outgoingUBX->classAndIDmatch are NOT_VALID then we can be confident we
-      // have had a checksum failure on the data packet
+      // If packetAck.classAndIDmatch is VALID but both
+      // outgoingUBX->valid and outgoingUBX->classAndIDmatch are
+      // NOT_VALID then we can be confident we have had a
+      // checksum failure on the data packet
       else if ((packetAck.classAndIDmatch == SFE_UBLOX_PACKET_VALIDITY_VALID) &&
                (outgoingUBX->classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_NOT_VALID) &&
                (outgoingUBX->valid == SFE_UBLOX_PACKET_VALIDITY_NOT_VALID)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
+        if (isDebugDetailed()) {
           _debugSerial->print(F("waitForACKResponse: CRC failed after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
@@ -3384,32 +3460,37 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForACKResponse(ubxPacket *outgoingUBX,
         return (SFE_UBLOX_STATUS_CRC_FAIL); // Checksum fail
       }
 
-      // If our packet was not-acknowledged (NACK) we do not receive a data
-      // packet - we only get the NACK. So you would expect outgoingUBX->valid
-      // and outgoingUBX->classAndIDmatch to still be NOT_DEFINED But if a full
-      // PVT packet arrives afterwards outgoingUBX->valid could be VALID (or
-      // just possibly NOT_VALID) but outgoingUBX->cls and outgoingUBX->id would
-      // not match... So I think this is telling us we need a special state for
-      // packetAck.classAndIDmatch to tell us the packet was definitely NACK'd
-      // otherwise we are possibly just guessing... Note: the addition of
-      // packetBuf changes the logic of this, but we'll leave the code as is for
-      // now.
+      // If our packet was not-acknowledged (NACK) we do not
+      // receive a data packet - we only get the NACK. So you
+      // would expect outgoingUBX->valid and
+      // outgoingUBX->classAndIDmatch to still be NOT_DEFINED
+      // But if a full PVT packet arrives afterwards
+      // outgoingUBX->valid could be VALID (or just possibly
+      // NOT_VALID) but outgoingUBX->cls and outgoingUBX->id
+      // would not match... So I think this is telling us we
+      // need a special state for packetAck.classAndIDmatch to
+      // tell us the packet was definitely NACK'd otherwise we
+      // are possibly just guessing... Note: the addition of
+      // packetBuf changes the logic of this, but we'll leave
+      // the code as is for now.
       else if (packetAck.classAndIDmatch == SFE_UBLOX_PACKET_NOTACKNOWLEDGED) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
-          _debugSerial->print(
-              F("waitForACKResponse: data was NOTACKNOWLEDGED (NACK) after "));
+        if (isDebugDetailed()) {
+          _debugSerial->print(F("waitForACKResponse: data was NOTACKNOWLEDGED "
+                                "(NACK) after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (SFE_UBLOX_STATUS_COMMAND_NACK); // We received a NACK!
+        return (SFE_UBLOX_STATUS_COMMAND_NACK); // We received a
+                                                // NACK!
       }
 
       // If the outgoingUBX->classAndIDmatch is VALID but the
-      // packetAck.classAndIDmatch is NOT_VALID then the ack probably had a
-      // checksum error. We will take a gamble and return DATA_RECEIVED. If we
-      // were playing safe, we should return FAIL instead
+      // packetAck.classAndIDmatch is NOT_VALID then the ack
+      // probably had a checksum error. We will take a gamble
+      // and return DATA_RECEIVED. If we were playing safe, we
+      // should return FAIL instead
       else if ((outgoingUBX->classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_VALID) &&
                (packetAck.classAndIDmatch ==
@@ -3418,48 +3499,51 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForACKResponse(ubxPacket *outgoingUBX,
                (outgoingUBX->cls == requestedClass) &&
                (outgoingUBX->id == requestedID)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
+        if (isDebugDetailed()) {
           _debugSerial->print(F("waitForACKResponse: VALID data and INVALID "
                                 "ACK received after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (SFE_UBLOX_STATUS_DATA_RECEIVED); // We received valid data and
+        return (SFE_UBLOX_STATUS_DATA_RECEIVED); // We received
+                                                 // valid data and
                                                  // an invalid ACK!
       }
 
-      // If the outgoingUBX->classAndIDmatch is NOT_VALID and the
-      // packetAck.classAndIDmatch is NOT_VALID then we return a FAIL. This must
-      // be a double checksum failure?
+      // If the outgoingUBX->classAndIDmatch is NOT_VALID and
+      // the packetAck.classAndIDmatch is NOT_VALID then we
+      // return a FAIL. This must be a double checksum failure?
       else if ((outgoingUBX->classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_NOT_VALID) &&
                (packetAck.classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_NOT_VALID)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
+        if (isDebugDetailed()) {
           _debugSerial->print(F("waitForACKResponse: INVALID data and INVALID "
                                 "ACK received after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (SFE_UBLOX_STATUS_FAIL); // We received invalid data and an
-                                        // invalid ACK!
+        return (SFE_UBLOX_STATUS_FAIL); // We received invalid data
+                                        // and an invalid ACK!
       }
 
       // If the outgoingUBX->classAndIDmatch is VALID and the
-      // packetAck.classAndIDmatch is NOT_DEFINED then the ACK has not yet been
-      // received and we should keep waiting for it
+      // packetAck.classAndIDmatch is NOT_DEFINED then the ACK
+      // has not yet been received and we should keep waiting
+      // for it
       else if ((outgoingUBX->classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_VALID) &&
                (packetAck.classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED)) {
-        // if (_printDebug == true)
+        // if (isDebugDetailed())
         // {
-        //   _debugSerial->print(F("waitForACKResponse: valid data after "));
-        //   _debugSerial->print(millis() - startTime);
-        //   _debugSerial->println(F(" msec. Waiting for ACK."));
+        //   _debugSerial->print(F("waitForACKResponse: valid
+        //   data after ")); _debugSerial->print(millis() -
+        //   startTime); _debugSerial->println(F(" msec. Waiting
+        //   for ACK."));
         // }
       }
 
@@ -3469,27 +3553,28 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForACKResponse(ubxPacket *outgoingUBX,
   }           // while (millis() - startTime < maxTime)
 
   // We have timed out...
-  // If the outgoingUBX->classAndIDmatch is VALID then we can take a gamble and
-  // return DATA_RECEIVED even though we did not get an ACK
+  // If the outgoingUBX->classAndIDmatch is VALID then we can
+  // take a gamble and return DATA_RECEIVED even though we did
+  // not get an ACK
   if ((outgoingUBX->classAndIDmatch == SFE_UBLOX_PACKET_VALIDITY_VALID) &&
       (packetAck.classAndIDmatch == SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED) &&
       (outgoingUBX->valid == SFE_UBLOX_PACKET_VALIDITY_VALID) &&
       (outgoingUBX->cls == requestedClass) &&
       (outgoingUBX->id == requestedID)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
-      _debugSerial->print(
-          F("waitForACKResponse: TIMEOUT with valid data after "));
+    if (isDebugDetailed()) {
+      _debugSerial->print(F("waitForACKResponse: TIMEOUT with "
+                            "valid data after "));
       _debugSerial->print(millis() - startTime);
       _debugSerial->println(F(" msec. "));
     }
 #endif
-    return (SFE_UBLOX_STATUS_DATA_RECEIVED); // We received valid data... But no
-                                             // ACK!
+    return (SFE_UBLOX_STATUS_DATA_RECEIVED); // We received valid
+                                             // data... But no ACK!
   }
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("waitForACKResponse: TIMEOUT after "));
     _debugSerial->print(millis() - startTime);
     _debugSerial->println(F(" msec."));
@@ -3500,93 +3585,109 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForACKResponse(ubxPacket *outgoingUBX,
 }
 
 // For non-CFG queries no ACK is sent so we use this function
-// Returns SFE_UBLOX_STATUS_DATA_RECEIVED if we got a config packet full of
-// response data that has CLS/ID match to our query packet Returns
-// SFE_UBLOX_STATUS_CRC_FAIL if we got a corrupt config packet that has CLS/ID
-// match to our query packet Returns SFE_UBLOX_STATUS_TIMEOUT if we timed out
-// Returns SFE_UBLOX_STATUS_DATA_OVERWRITTEN if we got an a valid packetCfg but
-// that the packetCfg has been
-//  or is currently being overwritten (remember that Serial data can arrive very
-//  slowly)
+// Returns SFE_UBLOX_STATUS_DATA_RECEIVED if we got a config
+// packet full of response data that has CLS/ID match to our
+// query packet Returns SFE_UBLOX_STATUS_CRC_FAIL if we got a
+// corrupt config packet that has CLS/ID match to our query
+// packet Returns SFE_UBLOX_STATUS_TIMEOUT if we timed out
+// Returns SFE_UBLOX_STATUS_DATA_OVERWRITTEN if we got an a
+// valid packetCfg but that the packetCfg has been
+//  or is currently being overwritten (remember that Serial data
+//  can arrive very slowly)
 sfe_ublox_status_e SFE_UBLOX_GNSS::waitForNoACKResponse(ubxPacket *outgoingUBX,
                                                         uint8_t requestedClass,
                                                         uint8_t requestedID,
                                                         uint16_t maxTime) {
-  outgoingUBX->valid =
-      SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go VALID (or
-                                             // NOT_VALID) when we receive a
-                                             // response to the packet we sent
+  outgoingUBX->valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go
+                                                              // VALID (or
+                                                              // NOT_VALID) when
+                                                              // we receive a
+                                                              // response to the
+                                                              // packet we sent
   packetAck.valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetBuf.valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetAuto.valid = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   outgoingUBX->classAndIDmatch =
-      SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go VALID (or
-                                             // NOT_VALID) when we receive a
-                                             // packet that matches the
-                                             // requested class and ID
+      SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED; // This will go
+                                             // VALID (or
+                                             // NOT_VALID) when
+                                             // we receive a
+                                             // packet that
+                                             // matches the
+                                             // requested class
+                                             // and ID
   packetAck.classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetBuf.classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
   packetAuto.classAndIDmatch = SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED;
 
   unsigned long startTime = millis();
   while (millis() - startTime < maxTime) {
-    if (checkUbloxInternal(outgoingUBX, requestedClass, requestedID) ==
-        true) // See if new data is available. Process bytes as they come in.
+    if (checkUbloxInternal(outgoingUBX, requestedClass,
+                           requestedID) ==
+        true) // See if new data is available. Process bytes as
+              // they come in.
     {
 
       // If outgoingUBX->classAndIDmatch is VALID
-      // and outgoingUBX->valid is _still_ VALID and the class and ID _still_
-      // match then we can be confident that the data in outgoingUBX is valid
+      // and outgoingUBX->valid is _still_ VALID and the class
+      // and ID _still_ match then we can be confident that the
+      // data in outgoingUBX is valid
       if ((outgoingUBX->classAndIDmatch == SFE_UBLOX_PACKET_VALIDITY_VALID) &&
           (outgoingUBX->valid == SFE_UBLOX_PACKET_VALIDITY_VALID) &&
           (outgoingUBX->cls == requestedClass) &&
           (outgoingUBX->id == requestedID)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
-          _debugSerial->print(
-              F("waitForNoACKResponse: valid data with CLS/ID match after "));
+        if (isDebugDetailed()) {
+          _debugSerial->print(F("waitForNoACKResponse: valid data with CLS/ID "
+                                "match after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (SFE_UBLOX_STATUS_DATA_RECEIVED); // We received valid data!
+        return (SFE_UBLOX_STATUS_DATA_RECEIVED); // We received
+                                                 // valid data!
       }
 
       // If the outgoingUBX->classAndIDmatch is VALID
-      // but the outgoingUBX->cls or ID no longer match then we can be confident
-      // that we had valid data but it has been or is currently being
-      // overwritten by another packet (e.g. PVT). If (e.g.) a PVT packet is
-      // _being_ received: outgoingUBX->valid will be NOT_DEFINED If (e.g.) a
-      // PVT packet _has been_ received: outgoingUBX->valid will be VALID (or
-      // just possibly NOT_VALID) So we cannot use outgoingUBX->valid as part of
-      // this check. Note: the addition of packetBuf should make this check
-      // redundant!
+      // but the outgoingUBX->cls or ID no longer match then we
+      // can be confident that we had valid data but it has been
+      // or is currently being overwritten by another packet
+      // (e.g. PVT). If (e.g.) a PVT packet is _being_ received:
+      // outgoingUBX->valid will be NOT_DEFINED If (e.g.) a PVT
+      // packet _has been_ received: outgoingUBX->valid will be
+      // VALID (or just possibly NOT_VALID) So we cannot use
+      // outgoingUBX->valid as part of this check. Note: the
+      // addition of packetBuf should make this check redundant!
       else if ((outgoingUBX->classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_VALID) &&
                ((outgoingUBX->cls != requestedClass) ||
                 (outgoingUBX->id != requestedID))) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
-          _debugSerial->print(
-              F("waitForNoACKResponse: data being OVERWRITTEN after "));
+        if (isDebugDetailed()) {
+          _debugSerial->print(F("waitForNoACKResponse: data "
+                                "being OVERWRITTEN after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (
-            SFE_UBLOX_STATUS_DATA_OVERWRITTEN); // Data was valid but has been
-                                                // or is being overwritten
+        return (SFE_UBLOX_STATUS_DATA_OVERWRITTEN); // Data was
+                                                    // valid but has
+                                                    // been or is
+                                                    // being
+                                                    // overwritten
       }
 
       // If outgoingUBX->classAndIDmatch is NOT_DEFINED
-      // and outgoingUBX->valid is VALID then this must be (e.g.) a PVT packet
+      // and outgoingUBX->valid is VALID then this must be
+      // (e.g.) a PVT packet
       else if ((outgoingUBX->classAndIDmatch ==
                 SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED) &&
                (outgoingUBX->valid == SFE_UBLOX_PACKET_VALIDITY_VALID)) {
-        // if (_printDebug == true)
+        // if (isDebugDetailed())
         // {
-        //   _debugSerial->print(F("waitForNoACKResponse: valid but UNWANTED
-        //   data after ")); _debugSerial->print(millis() - startTime);
+        //   _debugSerial->print(F("waitForNoACKResponse: valid
+        //   but UNWANTED data after "));
+        //   _debugSerial->print(millis() - startTime);
         //   _debugSerial->print(F(" msec. Class: "));
         //   _debugSerial->print(outgoingUBX->cls);
         //   _debugSerial->print(F(" ID: "));
@@ -3594,19 +3695,20 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForNoACKResponse(ubxPacket *outgoingUBX,
         // }
       }
 
-      // If the outgoingUBX->classAndIDmatch is NOT_VALID then we return CRC
-      // failure
+      // If the outgoingUBX->classAndIDmatch is NOT_VALID then
+      // we return CRC failure
       else if (outgoingUBX->classAndIDmatch ==
                SFE_UBLOX_PACKET_VALIDITY_NOT_VALID) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-        if (_printDebug == true) {
-          _debugSerial->print(
-              F("waitForNoACKResponse: CLS/ID match but failed CRC after "));
+        if (isDebugDetailed()) {
+          _debugSerial->print(F("waitForNoACKResponse: CLS/ID "
+                                "match but failed CRC after "));
           _debugSerial->print(millis() - startTime);
           _debugSerial->println(F(" msec"));
         }
 #endif
-        return (SFE_UBLOX_STATUS_CRC_FAIL); // We received invalid data
+        return (SFE_UBLOX_STATUS_CRC_FAIL); // We received
+                                            // invalid data
       }
     }
 
@@ -3614,7 +3716,7 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForNoACKResponse(ubxPacket *outgoingUBX,
   }
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("waitForNoACKResponse: TIMEOUT after "));
     _debugSerial->print(millis() - startTime);
     _debugSerial->println(F(" msec. No packet received."));
@@ -3627,24 +3729,23 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::waitForNoACKResponse(ubxPacket *outgoingUBX,
 // Check if any callbacks are waiting to be processed
 void SFE_UBLOX_GNSS::checkCallbacks(void) {
   if (checkCallbacksReentrant ==
-      true) // Check for reentry (i.e. checkCallbacks has been called from
-            // inside a callback)
+      true) // Check for reentry (i.e. checkCallbacks has been
+            // called from inside a callback)
     return;
 
   checkCallbacksReentrant = true;
 
   if ((packetUBXNAVPOSECEF !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVPOSECEF->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      &&
+      (packetUBXNAVPOSECEF->callbackData != NULL) // If RAM has been allocated
+                                                  // for the copy of the data
       && (packetUBXNAVPOSECEF->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVPOSECEF->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   POSECEF"));
+
     packetUBXNAVPOSECEF->callbackPointer(
         *packetUBXNAVPOSECEF->callbackData); // Call the callback
     packetUBXNAVPOSECEF->automaticFlags.flags.bits.callbackCopyValid =
@@ -3653,16 +3754,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXNAVSTATUS !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVSTATUS->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXNAVSTATUS->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
       && (packetUBXNAVSTATUS->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVSTATUS->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   STATUS"));
     packetUBXNAVSTATUS->callbackPointer(
         *packetUBXNAVSTATUS->callbackData); // Call the callback
     packetUBXNAVSTATUS->automaticFlags.flags.bits.callbackCopyValid =
@@ -3670,16 +3768,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXNAVDOP != NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVDOP->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXNAVDOP->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXNAVDOP->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVDOP->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   DOP"));
     packetUBXNAVDOP->callbackPointer(
         *packetUBXNAVDOP->callbackData); // Call the callback
     packetUBXNAVDOP->automaticFlags.flags.bits.callbackCopyValid =
@@ -3687,16 +3782,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXNAVATT != NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVATT->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXNAVATT->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXNAVATT->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVATT->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   ATT"));
     packetUBXNAVATT->callbackPointer(
         *packetUBXNAVATT->callbackData); // Call the callback
     packetUBXNAVATT->automaticFlags.flags.bits.callbackCopyValid =
@@ -3704,16 +3796,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXNAVPVT != NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVPVT->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXNAVPVT->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXNAVPVT->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVPVT->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   PVT"));
     packetUBXNAVPVT->callbackPointer(
         *packetUBXNAVPVT->callbackData); // Call the callback
     packetUBXNAVPVT->automaticFlags.flags.bits.callbackCopyValid =
@@ -3721,16 +3810,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXNAVODO != NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVODO->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXNAVODO->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXNAVODO->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVODO->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   ODO"));
     packetUBXNAVODO->callbackPointer(
         *packetUBXNAVODO->callbackData); // Call the callback
     packetUBXNAVODO->automaticFlags.flags.bits.callbackCopyValid =
@@ -3739,16 +3825,14 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXNAVVELECEF !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVVELECEF->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      &&
+      (packetUBXNAVVELECEF->callbackData != NULL) // If RAM has been allocated
+                                                  // for the copy of the data
       && (packetUBXNAVVELECEF->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVVELECEF->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   VELECEF"));
     packetUBXNAVVELECEF->callbackPointer(
         *packetUBXNAVVELECEF->callbackData); // Call the callback
     packetUBXNAVVELECEF->automaticFlags.flags.bits.callbackCopyValid =
@@ -3757,16 +3841,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXNAVVELNED !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVVELNED->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXNAVVELNED->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
       && (packetUBXNAVVELNED->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVVELNED->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   VELNED"));
     packetUBXNAVVELNED->callbackPointer(
         *packetUBXNAVVELNED->callbackData); // Call the callback
     packetUBXNAVVELNED->automaticFlags.flags.bits.callbackCopyValid =
@@ -3775,16 +3856,14 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXNAVHPPOSECEF !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVHPPOSECEF->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      &&
+      (packetUBXNAVHPPOSECEF->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
       && (packetUBXNAVHPPOSECEF->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   HPPOSECEF"));
     packetUBXNAVHPPOSECEF->callbackPointer(
         *packetUBXNAVHPPOSECEF->callbackData); // Call the callback
     packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.callbackCopyValid =
@@ -3793,16 +3872,14 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXNAVHPPOSLLH !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVHPPOSLLH->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      &&
+      (packetUBXNAVHPPOSLLH->callbackData != NULL) // If RAM has been allocated
+                                                   // for the copy of the data
       && (packetUBXNAVHPPOSLLH->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   HPPOSLLH"));
     packetUBXNAVHPPOSLLH->callbackPointer(
         *packetUBXNAVHPPOSLLH->callbackData); // Call the callback
     packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.callbackCopyValid =
@@ -3811,16 +3888,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXNAVCLOCK !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVCLOCK->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXNAVCLOCK->callbackData != NULL) // If RAM has been allocated
+                                                   // for the copy of the data
       && (packetUBXNAVCLOCK->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVCLOCK->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   CLOCK"));
     packetUBXNAVCLOCK->callbackPointer(
         *packetUBXNAVCLOCK->callbackData); // Call the callback
     packetUBXNAVCLOCK->automaticFlags.flags.bits.callbackCopyValid =
@@ -3829,16 +3903,14 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXNAVRELPOSNED !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXNAVRELPOSNED->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      &&
+      (packetUBXNAVRELPOSNED->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
       && (packetUBXNAVRELPOSNED->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXNAVRELPOSNED->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for NAV
-    //   RELPOSNED"));
     packetUBXNAVRELPOSNED->callbackPointer(
         *packetUBXNAVRELPOSNED->callbackData); // Call the callback
     packetUBXNAVRELPOSNED->automaticFlags.flags.bits.callbackCopyValid =
@@ -3847,16 +3919,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXRXMSFRBX !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXRXMSFRBX->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXRXMSFRBX->callbackData != NULL) // If RAM has been allocated
+                                                   // for the copy of the data
       && (packetUBXRXMSFRBX->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXRXMSFRBX->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for RXM
-    //   SFRBX"));
     packetUBXRXMSFRBX->callbackPointer(
         *packetUBXRXMSFRBX->callbackData); // Call the callback
     packetUBXRXMSFRBX->automaticFlags.flags.bits.callbackCopyValid =
@@ -3865,16 +3934,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXRXMRAWX !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXRXMRAWX->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXRXMRAWX->callbackData != NULL) // If RAM has been allocated
+                                                  // for the copy of the data
       && (packetUBXRXMRAWX->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXRXMRAWX->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for RXM
-    //   RAWX"));
     packetUBXRXMRAWX->callbackPointer(
         *packetUBXRXMRAWX->callbackData); // Call the callback
     packetUBXRXMRAWX->automaticFlags.flags.bits.callbackCopyValid =
@@ -3882,16 +3948,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXTIMTM2 != NULL) // If RAM has been allocated for message storage
-      && (packetUBXTIMTM2->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXTIMTM2->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXTIMTM2->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXTIMTM2->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for TIM
-    //   TM2"));
     packetUBXTIMTM2->callbackPointer(
         *packetUBXTIMTM2->callbackData); // Call the callback
     packetUBXTIMTM2->automaticFlags.flags.bits.callbackCopyValid =
@@ -3899,16 +3962,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXESFALG != NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFALG->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXESFALG->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXESFALG->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXESFALG->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for ESF
-    //   ALG"));
     packetUBXESFALG->callbackPointer(
         *packetUBXESFALG->callbackData); // Call the callback
     packetUBXESFALG->automaticFlags.flags.bits.callbackCopyValid =
@@ -3916,16 +3976,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXESFINS != NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFINS->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXESFINS->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXESFINS->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXESFINS->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for ESF
-    //   INS"));
     packetUBXESFINS->callbackPointer(
         *packetUBXESFINS->callbackData); // Call the callback
     packetUBXESFINS->automaticFlags.flags.bits.callbackCopyValid =
@@ -3934,16 +3991,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXESFMEAS !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFMEAS->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXESFMEAS->callbackData != NULL) // If RAM has been allocated
+                                                  // for the copy of the data
       && (packetUBXESFMEAS->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXESFMEAS->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for ESF
-    //   MEAS"));
     packetUBXESFMEAS->callbackPointer(
         *packetUBXESFMEAS->callbackData); // Call the callback
     packetUBXESFMEAS->automaticFlags.flags.bits.callbackCopyValid =
@@ -3951,16 +4005,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXESFRAW != NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFRAW->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXESFRAW->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXESFRAW->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXESFRAW->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for ESF
-    //   RAW"));
     packetUBXESFRAW->callbackPointer(
         *packetUBXESFRAW->callbackData); // Call the callback
     packetUBXESFRAW->automaticFlags.flags.bits.callbackCopyValid =
@@ -3969,16 +4020,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
   if ((packetUBXESFSTATUS !=
        NULL) // If RAM has been allocated for message storage
-      && (packetUBXESFSTATUS->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXESFSTATUS->callbackData != NULL) // If RAM has been allocated
+                                                    // for the copy of the data
       && (packetUBXESFSTATUS->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXESFSTATUS->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for ESF
-    //   STATUS"));
     packetUBXESFSTATUS->callbackPointer(
         *packetUBXESFSTATUS->callbackData); // Call the callback
     packetUBXESFSTATUS->automaticFlags.flags.bits.callbackCopyValid =
@@ -3986,16 +4034,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXHNRATT != NULL) // If RAM has been allocated for message storage
-      && (packetUBXHNRATT->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXHNRATT->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXHNRATT->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXHNRATT->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for HNR
-    //   ATT"));
     packetUBXHNRATT->callbackPointer(
         *packetUBXHNRATT->callbackData); // Call the callback
     packetUBXHNRATT->automaticFlags.flags.bits.callbackCopyValid =
@@ -4003,16 +4048,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXHNRINS != NULL) // If RAM has been allocated for message storage
-      && (packetUBXHNRINS->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXHNRINS->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXHNRINS->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXHNRINS->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for HNR
-    //   INS"));
     packetUBXHNRINS->callbackPointer(
         *packetUBXHNRINS->callbackData); // Call the callback
     packetUBXHNRINS->automaticFlags.flags.bits.callbackCopyValid =
@@ -4020,16 +4062,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
   }
 
   if ((packetUBXHNRPVT != NULL) // If RAM has been allocated for message storage
-      && (packetUBXHNRPVT->callbackData !=
-          NULL) // If RAM has been allocated for the copy of the data
+      && (packetUBXHNRPVT->callbackData != NULL) // If RAM has been allocated
+                                                 // for the copy of the data
       && (packetUBXHNRPVT->callbackPointer !=
           NULL) // If the pointer to the callback has been defined
       && (packetUBXHNRPVT->automaticFlags.flags.bits.callbackCopyValid ==
           true)) // If the copy of the data is valid
   {
-    // if (_printDebug == true)
-    //   _debugSerial->println(F("checkCallbacks: calling callback for HNR
-    //   PVT"));
     packetUBXHNRPVT->callbackPointer(
         *packetUBXHNRPVT->callbackData); // Call the callback
     packetUBXHNRPVT->automaticFlags.flags.bits.callbackCopyValid =
@@ -4041,12 +4080,13 @@ void SFE_UBLOX_GNSS::checkCallbacks(void) {
 
 // Push (e.g.) RTCM data directly to the module
 // Returns true if all numDataBytes were pushed successfully
-// Warning: this function does not check that the data is valid. It is the
-// user's responsibility to ensure the data is valid before pushing. Default to
-// using a restart between transmissions. But processors like ESP32 seem to need
-// a stop (#30). Set stop to true to use a stop instead. On processors like the
-// ESP32, you can use setI2CTransactionSize to increase the size of each
-// transmission - to e.g. 128 bytes
+// Warning: this function does not check that the data is valid.
+// It is the user's responsibility to ensure the data is valid
+// before pushing. Default to using a restart between
+// transmissions. But processors like ESP32 seem to need a stop
+// (#30). Set stop to true to use a stop instead. On processors
+// like the ESP32, you can use setI2CTransactionSize to increase
+// the size of each transmission - to e.g. 128 bytes
 bool SFE_UBLOX_GNSS::pushRawData(uint8_t *dataBytes, size_t numDataBytes,
                                  bool stop) {
   if (commType == COMM_TYPE_SERIAL) {
@@ -4059,7 +4099,8 @@ bool SFE_UBLOX_GNSS::pushRawData(uint8_t *dataBytes, size_t numDataBytes,
     size_t bytesWrittenTotal = 0;
 
     while (bytesLeftToWrite > 0) {
-      size_t bytesToWrite; // Limit bytesToWrite to i2cTransactionSize
+      size_t bytesToWrite; // Limit bytesToWrite to
+                           // i2cTransactionSize
       if (bytesLeftToWrite > i2cTransactionSize)
         bytesToWrite = i2cTransactionSize;
       else
@@ -4075,12 +4116,12 @@ bool SFE_UBLOX_GNSS::pushRawData(uint8_t *dataBytes, size_t numDataBytes,
 
       if (bytesLeftToWrite > 0) {
         if (_i2cPort->endTransmission(stop) !=
-            0)            // Send a restart or stop command
+            0)          // Send a restart or stop command
           return false; // Sensor did not ACK
       } else {
-        if (_i2cPort->endTransmission() !=
-            0)            // We're done. Release bus. Always use a stop here
-          return false; // Sensor did not ACK
+        if (_i2cPort->endTransmission() != 0) // We're done. Release bus. Always
+                                              // use a stop here
+          return false;                       // Sensor did not ACK
       }
     }
 
@@ -4088,7 +4129,7 @@ bool SFE_UBLOX_GNSS::pushRawData(uint8_t *dataBytes, size_t numDataBytes,
   } else // SPI
   {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("pushRawData: SPI not currently supported"));
     }
 #endif
@@ -4106,9 +4147,10 @@ void SFE_UBLOX_GNSS::setFileBufferSize(uint16_t bufferSize) {
 // Return the file buffer size
 uint16_t SFE_UBLOX_GNSS::getFileBufferSize(void) { return (fileBufferSize); }
 
-// Extract numBytes of data from the file buffer. Copy it to destination.
-// It is the user's responsibility to ensure destination is large enough.
-// Returns the number of bytes extracted - which may be less than numBytes.
+// Extract numBytes of data from the file buffer. Copy it to
+// destination. It is the user's responsibility to ensure
+// destination is large enough. Returns the number of bytes
+// extracted - which may be less than numBytes.
 uint16_t SFE_UBLOX_GNSS::extractFileBufferData(uint8_t *destination,
                                                uint16_t numBytes) {
   // Check how many bytes are available in the buffer
@@ -4118,8 +4160,8 @@ uint16_t SFE_UBLOX_GNSS::extractFileBufferData(uint8_t *destination,
 
   // Start copying at fileBufferTail. Wrap-around if required.
   uint16_t bytesBeforeWrapAround =
-      fileBufferSize -
-      fileBufferTail; // How much space is available 'above' Tail?
+      fileBufferSize - fileBufferTail;  // How much space is
+                                        // available 'above' Tail?
   if (bytesBeforeWrapAround > numBytes) // Will we need to wrap-around?
   {
     bytesBeforeWrapAround = numBytes; // We need to wrap-around
@@ -4127,42 +4169,43 @@ uint16_t SFE_UBLOX_GNSS::extractFileBufferData(uint8_t *destination,
   memcpy(destination, &ubxFileBuffer[fileBufferTail],
          bytesBeforeWrapAround); // Copy the data out of the buffer
 
-  // Is there any data leftover which we need to copy from the 'bottom' of the
-  // buffer?
+  // Is there any data leftover which we need to copy from the
+  // 'bottom' of the buffer?
   uint16_t bytesLeftToCopy =
-      numBytes -
-      bytesBeforeWrapAround; // Calculate if there are any bytes left to copy
-  if (bytesLeftToCopy > 0)   // If there are bytes left to copy
+      numBytes - bytesBeforeWrapAround; // Calculate if there are
+                                        // any bytes left to copy
+  if (bytesLeftToCopy > 0)              // If there are bytes left to copy
   {
     memcpy(&destination[bytesBeforeWrapAround], &ubxFileBuffer[0],
-           bytesLeftToCopy); // Copy the remaining data out of the buffer
-    fileBufferTail = bytesLeftToCopy; // Update Tail. The next byte to be read
-                                      // will be read from here.
+           bytesLeftToCopy);          // Copy the remaining data out of
+                                      // the buffer
+    fileBufferTail = bytesLeftToCopy; // Update Tail. The next byte to
+                                      // be read will be read from here.
   } else {
-    fileBufferTail += numBytes; // Only update Tail. The next byte to be read
-                                // will be read from here.
+    fileBufferTail += numBytes; // Only update Tail. The next byte to be
+                                // read will be read from here.
   }
 
   return (numBytes); // Return the number of bytes extracted
 }
 
-// Returns the number of bytes available in file buffer which are waiting to be
-// read
+// Returns the number of bytes available in file buffer which
+// are waiting to be read
 uint16_t SFE_UBLOX_GNSS::fileBufferAvailable(void) {
   return (fileBufferSpaceUsed());
 }
 
-// Returns the maximum number of bytes which the file buffer contained.
-// Handy for checking the buffer is large enough to handle all the incoming
-// data.
+// Returns the maximum number of bytes which the file buffer
+// contained. Handy for checking the buffer is large enough to
+// handle all the incoming data.
 uint16_t SFE_UBLOX_GNSS::getMaxFileBufferAvail(void) {
   return (fileBufferMaxAvail);
 }
 
 // Clear the file buffer - discard all contents
 void SFE_UBLOX_GNSS::clearFileBuffer(void) {
-  if (fileBufferSize == 0) // Bail if the user has not called setFileBufferSize
-                           // (probably redundant)
+  if (fileBufferSize == 0) // Bail if the user has not called
+                           // setFileBufferSize (probably redundant)
     return;
   fileBufferTail = fileBufferHead;
 }
@@ -4175,7 +4218,7 @@ bool SFE_UBLOX_GNSS::createFileBuffer(void) {
   if (fileBufferSize == 0) // Bail if the user has not called setFileBufferSize
   {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("createFileBuffer: Warning. fileBufferSize is "
                               "zero. Data logging is not possible."));
     }
@@ -4183,12 +4226,12 @@ bool SFE_UBLOX_GNSS::createFileBuffer(void) {
     return false;
   }
 
-  if (ubxFileBuffer !=
-      NULL) // Bail if RAM has already been allocated for the file buffer
-  { // This will happen if you call .begin more than once - without calling .end
-    // first
+  if (ubxFileBuffer != NULL) // Bail if RAM has already been
+                             // allocated for the file buffer
+  { // This will happen if you call .begin more than once -
+    // without calling .end first
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("createFileBuffer: Warning. File buffer already "
                               "exists. Skipping..."));
     }
@@ -4196,21 +4239,19 @@ bool SFE_UBLOX_GNSS::createFileBuffer(void) {
     return false;
   }
 
-  ubxFileBuffer = new uint8_t[fileBufferSize]; // Allocate RAM for the buffer
+  ubxFileBuffer = new uint8_t[fileBufferSize]; // Allocate RAM
+                                               // for the buffer
 
-  if(!ubxFileBuffer) // Check if the new (alloc) was successful
+  if (!ubxFileBuffer) // Check if the new (alloc) was successful
   {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-    {
+    if (isDebugLimited()) {
       _debugSerial->println(F("createFileBuffer: RAM alloc failed!"));
     }
     return false;
   }
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("createFileBuffer: fileBufferSize is: "));
     _debugSerial->println(fileBufferSize);
   }
@@ -4234,8 +4275,8 @@ uint16_t SFE_UBLOX_GNSS::fileBufferSpaceUsed(void) {
     // Wrap-around has not occurred so do a simple subtraction
     return (fileBufferHead - fileBufferTail);
   } else {
-    // Wrap-around has occurred so do a simple subtraction but add in the
-    // fileBufferSize
+    // Wrap-around has occurred so do a simple subtraction but
+    // add in the fileBufferSize
     return ((uint16_t)(((uint32_t)fileBufferHead + (uint32_t)fileBufferSize) -
                        (uint32_t)fileBufferTail));
   }
@@ -4244,25 +4285,23 @@ uint16_t SFE_UBLOX_GNSS::fileBufferSpaceUsed(void) {
 // PRIVATE: Add a UBX packet to the file buffer
 bool SFE_UBLOX_GNSS::storePacket(ubxPacket *msg) {
   // First, check that the file buffer has been created
-  if(!(ubxFileBuffer) || (fileBufferSize == 0)) {
+  if (!(ubxFileBuffer) || (fileBufferSize == 0)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("storePacket: file buffer not available!"));
     }
 #endif
     return false;
   }
 
-  // Now, check if there is enough space in the buffer for all of the data
+  // Now, check if there is enough space in the buffer for all
+  // of the data
   uint16_t totalLength = msg->len + 8; // Total length. Include sync chars,
                                        // class, id, length and checksum bytes
   if (totalLength > fileBufferSpaceAvailable()) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->println(
-          F("storePacket: insufficient space available! Data will be lost!"));
+    if (isDebugLimited()) {
+      _debugSerial->println(F("storePacket: insufficient space "
+                              "available! Data will be lost!"));
     }
     return false;
   }
@@ -4294,29 +4333,27 @@ bool SFE_UBLOX_GNSS::storePacket(ubxPacket *msg) {
 // PRIVATE: Add theBytes to the file buffer
 bool SFE_UBLOX_GNSS::storeFileBytes(uint8_t *theBytes, uint16_t numBytes) {
   // First, check that the file buffer has been created
-  if(!(ubxFileBuffer) || (fileBufferSize == 0)) {
+  if (!(ubxFileBuffer) || (fileBufferSize == 0)) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("storeFileBytes: file buffer not available!"));
     }
 #endif
     return false;
   }
 
-  // Now, check if there is enough space in the buffer for all of the data
+  // Now, check if there is enough space in the buffer for all
+  // of the data
   if (numBytes > fileBufferSpaceAvailable()) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->println(F(
-          "storeFileBytes: insufficient space available! Data will be lost!"));
+    if (isDebugLimited()) {
+      _debugSerial->println(F("storeFileBytes: insufficient space available! "
+                              "Data will be lost!"));
     }
     return false;
   }
 
-  // There is room for all the data in the buffer so copy the data into the
-  // buffer
+  // There is room for all the data in the buffer so copy the
+  // data into the buffer
   writeToFileBuffer(theBytes, numBytes);
 
   return true;
@@ -4326,8 +4363,8 @@ bool SFE_UBLOX_GNSS::storeFileBytes(uint8_t *theBytes, uint16_t numBytes) {
 void SFE_UBLOX_GNSS::writeToFileBuffer(uint8_t *theBytes, uint16_t numBytes) {
   // Start writing at fileBufferHead. Wrap-around if required.
   uint16_t bytesBeforeWrapAround =
-      fileBufferSize -
-      fileBufferHead; // How much space is available 'above' Head?
+      fileBufferSize - fileBufferHead; // How much space is
+                                       // available 'above' Head?
   if (bytesBeforeWrapAround >
       numBytes) // Is there enough room for all the data?
   {
@@ -4336,20 +4373,21 @@ void SFE_UBLOX_GNSS::writeToFileBuffer(uint8_t *theBytes, uint16_t numBytes) {
   memcpy(&ubxFileBuffer[fileBufferHead], theBytes,
          bytesBeforeWrapAround); // Copy the data into the buffer
 
-  // Is there any data leftover which we need to copy to the 'bottom' of the
-  // buffer?
+  // Is there any data leftover which we need to copy to the
+  // 'bottom' of the buffer?
   uint16_t bytesLeftToCopy =
-      numBytes -
-      bytesBeforeWrapAround; // Calculate if there are any bytes left to copy
-  if (bytesLeftToCopy > 0)   // If there are bytes left to copy
+      numBytes - bytesBeforeWrapAround; // Calculate if there are
+                                        // any bytes left to copy
+  if (bytesLeftToCopy > 0)              // If there are bytes left to copy
   {
     memcpy(&ubxFileBuffer[0], &theBytes[bytesBeforeWrapAround],
-           bytesLeftToCopy);          // Copy the remaining data into the buffer
-    fileBufferHead = bytesLeftToCopy; // Update Head. The next byte written will
-                                      // be written here.
+           bytesLeftToCopy);          // Copy the remaining data into the
+                                      // buffer
+    fileBufferHead = bytesLeftToCopy; // Update Head. The next byte
+                                      // written will be written here.
   } else {
-    fileBufferHead += numBytes; // Only update Head. The next byte written will
-                                // be written here.
+    fileBufferHead += numBytes; // Only update Head. The next byte
+                                // written will be written here.
   }
 
   // Update fileBufferMaxAvail if required
@@ -4358,11 +4396,12 @@ void SFE_UBLOX_GNSS::writeToFileBuffer(uint8_t *theBytes, uint16_t numBytes) {
     fileBufferMaxAvail = bytesInBuffer;
 }
 
-//=-=-=-=-=-=-=-= Specific commands =-=-=-=-=-=-=-==-=-=-=-=-=-=-=
+//=-=-=-=-=-=-=-= Specific commands
+//=-=-=-=-=-=-=-==-=-=-=-=-=-=-=
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-// Loads the payloadCfg array with the current protocol bits located the
-// UBX-CFG-PRT register for a given port
+// Loads the payloadCfg array with the current protocol bits
+// located the UBX-CFG-PRT register for a given port
 bool SFE_UBLOX_GNSS::getPortSettings(uint8_t portID, uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_PRT;
@@ -4372,12 +4411,13 @@ bool SFE_UBLOX_GNSS::getPortSettings(uint8_t portID, uint16_t maxWait) {
   payloadCfg[0] = portID;
 
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_RECEIVED); // We are expecting data and an ACK
+          SFE_UBLOX_STATUS_DATA_RECEIVED); // We are expecting
+                                           // data and an ACK
 }
 
-// Configure a given port to output UBX, NMEA, RTCM3 or a combination thereof
-// Port 0=I2c, 1=UART1, 2=UART2, 3=USB, 4=SPI
-// Bit:0 = UBX, :1=NMEA, :5=RTCM3
+// Configure a given port to output UBX, NMEA, RTCM3 or a
+// combination thereof Port 0=I2c, 1=UART1, 2=UART2, 3=USB,
+// 4=SPI Bit:0 = UBX, :1=NMEA, :5=RTCM3
 bool SFE_UBLOX_GNSS::setPortOutput(uint8_t portID, uint8_t outStreamSettings,
                                    uint16_t maxWait) {
   // Get the current config values for this port ID
@@ -4389,22 +4429,24 @@ bool SFE_UBLOX_GNSS::setPortOutput(uint8_t portID, uint8_t outStreamSettings,
   packetCfg.len = 20;
   packetCfg.startingSpot = 0;
 
-  // payloadCfg is now loaded with current bytes. Change only the ones we need
-  // to
-  payloadCfg[14] =
-      outStreamSettings; // OutProtocolMask LSB - Set outStream bits
+  // payloadCfg is now loaded with current bytes. Change only
+  // the ones we need to
+  payloadCfg[14] = outStreamSettings; // OutProtocolMask LSB -
+                                      // Set outStream bits
 
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
-// Configure a given port to input UBX, NMEA, RTCM3 or a combination thereof
-// Port 0=I2c, 1=UART1, 2=UART2, 3=USB, 4=SPI
-// Bit:0 = UBX, :1=NMEA, :5=RTCM3
+// Configure a given port to input UBX, NMEA, RTCM3 or a
+// combination thereof Port 0=I2c, 1=UART1, 2=UART2, 3=USB,
+// 4=SPI Bit:0 = UBX, :1=NMEA, :5=RTCM3
 bool SFE_UBLOX_GNSS::setPortInput(uint8_t portID, uint8_t inStreamSettings,
                                   uint16_t maxWait) {
   // Get the current config values for this port ID
-  // This will load the payloadCfg array with current port settings
+  // This will load the payloadCfg array with current port
+  // settings
   if (getPortSettings(portID, maxWait) == false)
     return false; // Something went wrong. Bail.
 
@@ -4413,19 +4455,22 @@ bool SFE_UBLOX_GNSS::setPortInput(uint8_t portID, uint8_t inStreamSettings,
   packetCfg.len = 20;
   packetCfg.startingSpot = 0;
 
-  // payloadCfg is now loaded with current bytes. Change only the ones we need
-  // to
-  payloadCfg[12] = inStreamSettings; // InProtocolMask LSB - Set inStream bits
+  // payloadCfg is now loaded with current bytes. Change only
+  // the ones we need to
+  payloadCfg[12] = inStreamSettings; // InProtocolMask LSB - Set
+                                     // inStream bits
 
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Changes the I2C address that the u-blox module responds to
 // 0x42 is the default but can be changed with this command
 bool SFE_UBLOX_GNSS::setI2CAddress(uint8_t deviceAddress, uint16_t maxWait) {
   // Get the current config values for the I2C port
-  // This will load the payloadCfg array with current port settings
+  // This will load the payloadCfg array with current port
+  // settings
   if (getPortSettings(COM_PORT_I2C, maxWait) == false)
     return false; // Something went wrong. Bail.
 
@@ -4434,12 +4479,13 @@ bool SFE_UBLOX_GNSS::setI2CAddress(uint8_t deviceAddress, uint16_t maxWait) {
   packetCfg.len = 20;
   packetCfg.startingSpot = 0;
 
-  // payloadCfg is now loaded with current bytes. Change only the ones we need
-  // to
+  // payloadCfg is now loaded with current bytes. Change only
+  // the ones we need to
   payloadCfg[4] = deviceAddress << 1; // DDC mode LSB
 
   if (sendCommand(&packetCfg, maxWait) ==
-      SFE_UBLOX_STATUS_DATA_SENT) // We are only expecting an ACK
+      SFE_UBLOX_STATUS_DATA_SENT) // We are only expecting an
+                                  // ACK
   {
     // Success! Now change our internal global.
     _gpsI2Caddress = deviceAddress; // Store the I2C address from user
@@ -4448,17 +4494,19 @@ bool SFE_UBLOX_GNSS::setI2CAddress(uint8_t deviceAddress, uint16_t maxWait) {
   return false;
 }
 
-// Changes the serial baud rate of the u-blox module, can't return success/fail
-// 'cause ACK from modem is lost due to baud rate change
+// Changes the serial baud rate of the u-blox module, can't
+// return success/fail 'cause ACK from modem is lost due to baud
+// rate change
 void SFE_UBLOX_GNSS::setSerialRate(uint32_t baudrate, uint8_t uartPort,
                                    uint16_t maxWait) {
   // Get the current config values for the UART port
-  // This will load the payloadCfg array with current port settings
+  // This will load the payloadCfg array with current port
+  // settings
   if (getPortSettings(uartPort, maxWait) == false)
     return; // Something went wrong. Bail.
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("Current baud rate: "));
     _debugSerial->println(((uint32_t)payloadCfg[10] << 16) |
                           ((uint32_t)payloadCfg[9] << 8) | payloadCfg[8]);
@@ -4470,15 +4518,15 @@ void SFE_UBLOX_GNSS::setSerialRate(uint32_t baudrate, uint8_t uartPort,
   packetCfg.len = 20;
   packetCfg.startingSpot = 0;
 
-  // payloadCfg is now loaded with current bytes. Change only the ones we need
-  // to
+  // payloadCfg is now loaded with current bytes. Change only
+  // the ones we need to
   payloadCfg[8] = baudrate;
   payloadCfg[9] = baudrate >> 8;
   payloadCfg[10] = baudrate >> 16;
   payloadCfg[11] = baudrate >> 24;
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("New baud rate:"));
     _debugSerial->println(((uint32_t)payloadCfg[10] << 16) |
                           ((uint32_t)payloadCfg[9] << 8) | payloadCfg[8]);
@@ -4487,14 +4535,15 @@ void SFE_UBLOX_GNSS::setSerialRate(uint32_t baudrate, uint8_t uartPort,
 
   sfe_ublox_status_e retVal = sendCommand(&packetCfg, maxWait);
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("setSerialRate: sendCommand returned: "));
     _debugSerial->println(statusString(retVal));
   }
 #endif
 }
 
-// Configure a port to output UBX, NMEA, RTCM3 or a combination thereof
+// Configure a port to output UBX, NMEA, RTCM3 or a combination
+// thereof
 bool SFE_UBLOX_GNSS::setI2COutput(uint8_t comSettings, uint16_t maxWait) {
   return (setPortOutput(COM_PORT_I2C, comSettings, maxWait));
 }
@@ -4520,23 +4569,24 @@ void SFE_UBLOX_GNSS::setNMEAOutputPort(Stream &nmeaOutputPort) {
 
 void SFE_UBLOX_GNSS::factoryReset() {
   // Copy default settings to permanent
-  // Note: this does not load the permanent configuration into the current
-  // configuration. Calling factoryDefault() will do that.
+  // Note: this does not load the permanent configuration into
+  // the current configuration. Calling factoryDefault() will do
+  // that.
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_CFG;
   packetCfg.len = 13;
   packetCfg.startingSpot = 0;
   for (uint8_t i = 0; i < 4; i++) {
-    payloadCfg[0 + i] =
-        0xff; // clear mask: copy default config to permanent config
+    payloadCfg[0 + i] = 0xff; // clear mask: copy default config
+                              // to permanent config
     payloadCfg[4 + i] = 0x00; // save mask: don't save current to permanent
-    payloadCfg[8 + i] =
-        0x00; // load mask: don't copy permanent config to current
+    payloadCfg[8 + i] = 0x00; // load mask: don't copy permanent
+                              // config to current
   }
   payloadCfg[12] = 0xff;      // all forms of permanent memory
   sendCommand(&packetCfg, 0); // don't expect ACK
-  hardReset(); // cause factory default config to actually be loaded and used
-               // cleanly
+  hardReset();                // cause factory default config to actually be
+                              // loaded and used cleanly
 }
 
 void SFE_UBLOX_GNSS::hardReset() {
@@ -4553,8 +4603,8 @@ void SFE_UBLOX_GNSS::hardReset() {
 }
 
 // Reset module to factory defaults
-// This still works but it is the old way of configuring ublox modules. See
-// getVal and setVal for the new methods
+// This still works but it is the old way of configuring ublox
+// modules. See getVal and setVal for the new methods
 bool SFE_UBLOX_GNSS::factoryDefault(uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_CFG;
@@ -4564,23 +4614,24 @@ bool SFE_UBLOX_GNSS::factoryDefault(uint16_t maxWait) {
   // Clear packet payload
   memset(payloadCfg, 0, packetCfg.len);
 
-  packetCfg.payload[0] =
-      0xFF; // Set any bit in the clearMask field to clear saved config
+  packetCfg.payload[0] = 0xFF; // Set any bit in the clearMask
+                               // field to clear saved config
   packetCfg.payload[1] = 0xFF;
-  packetCfg.payload[8] =
-      0xFF; // Set any bit in the loadMask field to discard current config and
-            // rebuild from lower non-volatile memory layers
+  packetCfg.payload[8] = 0xFF; // Set any bit in the loadMask field to
+                               // discard current config and rebuild
+                               // from lower non-volatile memory layers
   packetCfg.payload[9] = 0xFF;
 
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Save configuration to BBR / Flash
 
-// Save current configuration to flash and BBR (battery backed RAM)
-// This still works but it is the old way of configuring ublox modules. See
-// getVal and setVal for the new methods
+// Save current configuration to flash and BBR (battery backed
+// RAM) This still works but it is the old way of configuring
+// ublox modules. See getVal and setVal for the new methods
 bool SFE_UBLOX_GNSS::saveConfiguration(uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_CFG;
@@ -4590,17 +4641,19 @@ bool SFE_UBLOX_GNSS::saveConfiguration(uint16_t maxWait) {
   // Clear packet payload
   memset(payloadCfg, 0, packetCfg.len);
 
-  packetCfg.payload[4] = 0xFF; // Set any bit in the saveMask field to save
-                               // current config to Flash and BBR
+  packetCfg.payload[4] = 0xFF; // Set any bit in the saveMask field to
+                               // save current config to Flash and BBR
   packetCfg.payload[5] = 0xFF;
 
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
-// Save the selected configuration sub-sections to flash and BBR (battery backed
-// RAM) This still works but it is the old way of configuring ublox modules. See
-// getVal and setVal for the new methods
+// Save the selected configuration sub-sections to flash and BBR
+// (battery backed RAM) This still works but it is the old way
+// of configuring ublox modules. See getVal and setVal for the
+// new methods
 bool SFE_UBLOX_GNSS::saveConfigSelective(uint32_t configMask,
                                          uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
@@ -4619,10 +4672,12 @@ bool SFE_UBLOX_GNSS::saveConfigSelective(uint32_t configMask,
   packetCfg.payload[7] = (configMask >> 24) & 0xFF;
 
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
-// Configure a given message type for a given port (UART1, I2C, SPI, etc)
+// Configure a given message type for a given port (UART1, I2C,
+// SPI, etc)
 bool SFE_UBLOX_GNSS::configureMessage(uint8_t msgClass, uint8_t msgID,
                                       uint8_t portID, uint8_t sendRate,
                                       uint16_t maxWait) {
@@ -4635,28 +4690,31 @@ bool SFE_UBLOX_GNSS::configureMessage(uint8_t msgClass, uint8_t msgID,
   payloadCfg[0] = msgClass;
   payloadCfg[1] = msgID;
 
-  // This will load the payloadCfg array with current settings of the given
-  // register
+  // This will load the payloadCfg array with current settings
+  // of the given register
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
-    return false;                   // If command send fails then bail
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
+    return false;                     // If command send fails then bail
 
   // Now send it back with new mods
   packetCfg.len = 8;
 
-  // payloadCfg is now loaded with current bytes. Change only the ones we need
-  // to
+  // payloadCfg is now loaded with current bytes. Change only
+  // the ones we need to
   payloadCfg[2 + portID] =
-      sendRate; // Send rate is relative to the event a message is registered
-                // on. For example, if the rate of a navigation message is set
-                // to 2, the message is sent every 2nd navigation solution.
+      sendRate; // Send rate is relative to the event a message
+                // is registered on. For example, if the rate of
+                // a navigation message is set to 2, the message
+                // is sent every 2nd navigation solution.
 
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
-// Enable a given message type, default of 1 per update rate (usually 1 per
-// second)
+// Enable a given message type, default of 1 per update rate
+// (usually 1 per second)
 bool SFE_UBLOX_GNSS::enableMessage(uint8_t msgClass, uint8_t msgID,
                                    uint8_t portID, uint8_t rate,
                                    uint16_t maxWait) {
@@ -4677,30 +4735,32 @@ bool SFE_UBLOX_GNSS::disableNMEAMessage(uint8_t msgID, uint8_t portID,
   return (enableNMEAMessage(msgID, portID, 0, maxWait));
 }
 
-// Given a message number turns on a message ID for output over a given portID
-// (UART, I2C, SPI, USB, etc) To disable a message, set secondsBetween messages
-// to 0 Note: This function will return false if the message is already enabled
-// For base station RTK output we need to enable various sentences
+// Given a message number turns on a message ID for output over
+// a given portID (UART, I2C, SPI, USB, etc) To disable a
+// message, set secondsBetween messages to 0 Note: This function
+// will return false if the message is already enabled For base
+// station RTK output we need to enable various sentences
 
 // NEO-M8P has four:
 // 1005 = 0xF5 0x05 - Stationary RTK reference ARP
 // 1077 = 0xF5 0x4D - GPS MSM7
 // 1087 = 0xF5 0x57 - GLONASS MSM7
-// 1230 = 0xF5 0xE6 - GLONASS code-phase biases, set to once every 10 seconds
+// 1230 = 0xF5 0xE6 - GLONASS code-phase biases, set to once
+// every 10 seconds
 
 // ZED-F9P has six:
 // 1005, 1074, 1084, 1094, 1124, 1230
 
-// Much of this configuration is not documented and instead discerned from
-// u-center binary console
+// Much of this configuration is not documented and instead
+// discerned from u-center binary console
 bool SFE_UBLOX_GNSS::enableRTCMmessage(uint8_t messageNumber, uint8_t portID,
                                        uint8_t sendRate, uint16_t maxWait) {
   return (
       configureMessage(UBX_RTCM_MSB, messageNumber, portID, sendRate, maxWait));
 }
 
-// Disable a given message on a given port by setting secondsBetweenMessages to
-// zero
+// Disable a given message on a given port by setting
+// secondsBetweenMessages to zero
 bool SFE_UBLOX_GNSS::disableRTCMmessage(uint8_t messageNumber, uint8_t portID,
                                         uint16_t maxWait) {
   return (enableRTCMmessage(messageNumber, portID, 0, maxWait));
@@ -4708,7 +4768,8 @@ bool SFE_UBLOX_GNSS::disableRTCMmessage(uint8_t messageNumber, uint8_t portID,
 
 // Functions used for RTK and base station setup
 
-// Get the current TimeMode3 settings - these contain survey in statuses
+// Get the current TimeMode3 settings - these contain survey in
+// statuses
 bool SFE_UBLOX_GNSS::getSurveyMode(uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_TMODE3;
@@ -4716,7 +4777,8 @@ bool SFE_UBLOX_GNSS::getSurveyMode(uint16_t maxWait) {
   packetCfg.startingSpot = 0;
 
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_RECEIVED); // We are expecting data and an ACK
+          SFE_UBLOX_STATUS_DATA_RECEIVED); // We are expecting
+                                           // data and an ACK
 }
 
 // Control Survey-In for NEO-M8P
@@ -4731,13 +4793,13 @@ bool SFE_UBLOX_GNSS::setSurveyMode(uint8_t mode, uint16_t observationTime,
   packetCfg.len = 40;
   packetCfg.startingSpot = 0;
 
-  // payloadCfg should be loaded with poll response. Now modify only the bits we
-  // care about
-  payloadCfg[2] = mode; // Set mode. Survey-In and Disabled are most common. Use
-                        // ECEF (not LAT/LON/ALT).
+  // payloadCfg should be loaded with poll response. Now modify
+  // only the bits we care about
+  payloadCfg[2] = mode; // Set mode. Survey-In and Disabled are most
+                        // common. Use ECEF (not LAT/LON/ALT).
 
-  // svinMinDur is U4 (uint32_t) but we'll only use a uint16_t (waiting more
-  // than 65535 seconds seems excessive!)
+  // svinMinDur is U4 (uint32_t) but we'll only use a uint16_t
+  // (waiting more than 65535 seconds seems excessive!)
   payloadCfg[24] = observationTime & 0xFF; // svinMinDur in seconds
   payloadCfg[25] = observationTime >> 8;   // svinMinDur in seconds
   payloadCfg[26] = 0;                      // Truncate to 16 bits
@@ -4752,7 +4814,8 @@ bool SFE_UBLOX_GNSS::setSurveyMode(uint8_t mode, uint16_t observationTime,
   payloadCfg[31] = svinAccLimit >> 24;
 
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Begin Survey-In for NEO-M8P
@@ -4769,13 +4832,14 @@ bool SFE_UBLOX_GNSS::disableSurveyMode(uint16_t maxWait) {
 }
 
 // Set the ECEF or Lat/Long coordinates of a receiver
-// This imediately puts the receiver in TIME mode (fixed) and will begin
-// outputting RTCM sentences if enabled This is helpful once an antenna's
-// position has been established. See this tutorial:
+// This imediately puts the receiver in TIME mode (fixed) and
+// will begin outputting RTCM sentences if enabled This is
+// helpful once an antenna's position has been established. See
+// this tutorial:
 // https://learn.sparkfun.com/tutorials/how-to-build-a-diy-gnss-reference-station#gather-raw-gnss-data
 //  For ECEF the units are: cm, 0.1mm, cm, 0.1mm, cm, 0.1mm
-//  For Lat/Lon/Alt the units are: degrees^-7, degrees^-9, degrees^-7,
-//  degrees^-9, cm, 0.1mm
+//  For Lat/Lon/Alt the units are: degrees^-7, degrees^-9,
+//  degrees^-7, degrees^-9, cm, 0.1mm
 bool SFE_UBLOX_GNSS::setStaticPosition(int32_t ecefXOrLat, int8_t ecefXOrLatHP,
                                        int32_t ecefYOrLon, int8_t ecefYOrLonHP,
                                        int32_t ecefZOrAlt, int8_t ecefZOrAltHP,
@@ -4785,14 +4849,15 @@ bool SFE_UBLOX_GNSS::setStaticPosition(int32_t ecefXOrLat, int8_t ecefXOrLatHP,
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // Ask module for the current TimeMode3 settings. Loads into payloadCfg.
+  // Ask module for the current TimeMode3 settings. Loads into
+  // payloadCfg.
   if (sendCommand(&packetCfg, maxWait) != SFE_UBLOX_STATUS_DATA_RECEIVED)
     return false;
 
   packetCfg.len = 40;
 
-  // customCfg should be loaded with poll response. Now modify only the bits we
-  // care about
+  // customCfg should be loaded with poll response. Now modify
+  // only the bits we care about
   payloadCfg[2] = 2; // Set mode to fixed. Use ECEF (not LAT/LON/ALT).
 
   if (latLong == true)
@@ -4822,7 +4887,8 @@ bool SFE_UBLOX_GNSS::setStaticPosition(int32_t ecefXOrLat, int8_t ecefXOrLatHP,
   payloadCfg[18] = ecefZOrAltHP;
 
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 bool SFE_UBLOX_GNSS::setStaticPosition(int32_t ecefXOrLat, int32_t ecefYOrLon,
@@ -4834,14 +4900,15 @@ bool SFE_UBLOX_GNSS::setStaticPosition(int32_t ecefXOrLat, int32_t ecefYOrLon,
 
 // Module Protocol Version
 
-// Get the current protocol version of the u-blox module we're communicating
-// with This is helpful when deciding if we should call the high-precision
-// Lat/Long (HPPOSLLH) or the regular (POSLLH)
+// Get the current protocol version of the u-blox module we're
+// communicating with This is helpful when deciding if we should
+// call the high-precision Lat/Long (HPPOSLLH) or the regular
+// (POSLLH)
 uint8_t SFE_UBLOX_GNSS::getProtocolVersionHigh(uint16_t maxWait) {
-  if(!moduleSWVersion)
-    initModuleSWVersion(); // Check that RAM has been allocated for the SW
-                           // version
-  if(!moduleSWVersion) // Bail if the RAM allocation failed
+  if (!moduleSWVersion)
+    initModuleSWVersion(); // Check that RAM has been allocated
+                           // for the SW version
+  if (!moduleSWVersion)    // Bail if the RAM allocation failed
     return false;
 
   if (moduleSWVersion->moduleQueried == false)
@@ -4849,14 +4916,15 @@ uint8_t SFE_UBLOX_GNSS::getProtocolVersionHigh(uint16_t maxWait) {
   return (moduleSWVersion->versionHigh);
 }
 
-// Get the current protocol version of the u-blox module we're communicating
-// with This is helpful when deciding if we should call the high-precision
-// Lat/Long (HPPOSLLH) or the regular (POSLLH)
+// Get the current protocol version of the u-blox module we're
+// communicating with This is helpful when deciding if we should
+// call the high-precision Lat/Long (HPPOSLLH) or the regular
+// (POSLLH)
 uint8_t SFE_UBLOX_GNSS::getProtocolVersionLow(uint16_t maxWait) {
-  if(!moduleSWVersion)
-    initModuleSWVersion(); // Check that RAM has been allocated for the SW
-                           // version
-  if(!moduleSWVersion) // Bail if the RAM allocation failed
+  if (!moduleSWVersion)
+    initModuleSWVersion(); // Check that RAM has been allocated
+                           // for the SW version
+  if (!moduleSWVersion)    // Bail if the RAM allocation failed
     return false;
 
   if (moduleSWVersion->moduleQueried == false)
@@ -4864,35 +4932,40 @@ uint8_t SFE_UBLOX_GNSS::getProtocolVersionLow(uint16_t maxWait) {
   return (moduleSWVersion->versionLow);
 }
 
-// Get the current protocol version of the u-blox module we're communicating
-// with This is helpful when deciding if we should call the high-precision
-// Lat/Long (HPPOSLLH) or the regular (POSLLH)
+// Get the current protocol version of the u-blox module we're
+// communicating with This is helpful when deciding if we should
+// call the high-precision Lat/Long (HPPOSLLH) or the regular
+// (POSLLH)
 bool SFE_UBLOX_GNSS::getProtocolVersion(uint16_t maxWait) {
-  if(!moduleSWVersion)
-    initModuleSWVersion(); // Check that RAM has been allocated for the SW
-                           // version
-  if(!moduleSWVersion) // Bail if the RAM allocation failed
+  if (!moduleSWVersion)
+    initModuleSWVersion(); // Check that RAM has been allocated
+                           // for the SW version
+  if (!moduleSWVersion)    // Bail if the RAM allocation failed
     return false;
 
-  // Send packet with only CLS and ID, length of zero. This will cause the
-  // module to respond with the contents of that CLS/ID.
+  // Send packet with only CLS and ID, length of zero. This will
+  // cause the module to respond with the contents of that
+  // CLS/ID.
   packetCfg.cls = UBX_CLASS_MON;
   packetCfg.id = UBX_MON_VER;
 
   packetCfg.len = 0;
-  packetCfg.startingSpot =
-      40; // Start at first "extended software information" string
+  packetCfg.startingSpot = 40; // Start at first "extended
+                               // software information" string
 
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are only expecting data (no ACK)
-    return false;                   // If command send fails then bail
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are only expecting
+                                      // data (no ACK)
+    return false;                     // If command send fails then bail
 
-  // Payload should now contain ~220 characters (depends on module type)
+  // Payload should now contain ~220 characters (depends on
+  // module type)
 
-  // if (_printDebug == true)
+  // if (isDebugDetailed())
   // {
   //   _debugSerial->print(F("MON VER Payload:"));
-  //   for (int location = 0; location < packetCfg.len; location++)
+  //   for (int location = 0; location < packetCfg.len;
+  //   location++)
   //   {
   //     if (location % 30 == 0)
   //       _debugSerial->println();
@@ -4901,10 +4974,11 @@ bool SFE_UBLOX_GNSS::getProtocolVersion(uint16_t maxWait) {
   //   _debugSerial->println();
   // }
 
-  // We will step through the payload looking at each extension field of 30
-  // bytes
+  // We will step through the payload looking at each extension
+  // field of 30 bytes
   for (uint8_t extensionNumber = 0; extensionNumber < 10; extensionNumber++) {
-    // Now we need to find "PROTVER=18.00" in the incoming byte stream
+    // Now we need to find "PROTVER=18.00" in the incoming byte
+    // stream
     if ((payloadCfg[(30 * extensionNumber) + 0] == 'P') &&
         (payloadCfg[(30 * extensionNumber) + 6] == 'R')) {
       moduleSWVersion->versionHigh =
@@ -4916,7 +4990,7 @@ bool SFE_UBLOX_GNSS::getProtocolVersion(uint16_t maxWait) {
       moduleSWVersion->moduleQueried = true; // Mark this data as new
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-      if (_printDebug == true) {
+      if (isDebugDetailed()) {
         _debugSerial->print(F("Protocol version: "));
         _debugSerial->print(moduleSWVersion->versionHigh);
         _debugSerial->print(F("."));
@@ -4933,11 +5007,10 @@ bool SFE_UBLOX_GNSS::getProtocolVersion(uint16_t maxWait) {
 // PRIVATE: Allocate RAM for moduleSWVersion and initialize it
 bool SFE_UBLOX_GNSS::initModuleSWVersion() {
   moduleSWVersion = new moduleSWVersion_t; // Allocate RAM for the main struct
-  if(!moduleSWVersion) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!moduleSWVersion) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initModuleSWVersion: RAM alloc failed!"));
+    }
     return false;
   }
   moduleSWVersion->versionHigh = 0;
@@ -4952,14 +5025,16 @@ bool SFE_UBLOX_GNSS::initModuleSWVersion() {
 bool SFE_UBLOX_GNSS::addGeofence(int32_t latitude, int32_t longitude,
                                  uint32_t radius, byte confidence,
                                  byte pinPolarity, byte pin, uint16_t maxWait) {
-  if(!currentGeofenceParams)
-    initGeofenceParams();               // Check if RAM has been allocated for
-                                        // currentGeofenceParams
-  if(!currentGeofenceParams) // Abort if the RAM allocation failed
+  if (!currentGeofenceParams)
+    initGeofenceParams();     // Check if RAM has been allocated for
+                              // currentGeofenceParams
+  if (!currentGeofenceParams) // Abort if the RAM allocation
+                              // failed
     return false;
 
   if (currentGeofenceParams->numFences >= 4)
-    return false; // Quit if we already have four geofences defined
+    return false; // Quit if we already have four geofences
+                  // defined
 
   // Store the new geofence parameters
   currentGeofenceParams->lats[currentGeofenceParams->numFences] = latitude;
@@ -4975,16 +5050,16 @@ bool SFE_UBLOX_GNSS::addGeofence(int32_t latitude, int32_t longitude,
 
   payloadCfg[0] = 0;                                // Message version = 0x00
   payloadCfg[1] = currentGeofenceParams->numFences; // numFences
-  payloadCfg[2] = confidence; // confLvl = Confidence level 0-4 (none, 68%,
-                              // 95%, 99.7%, 99.99%)
+  payloadCfg[2] = confidence; // confLvl = Confidence level 0-4
+                              // (none, 68%, 95%, 99.7%, 99.99%)
   payloadCfg[3] = 0;          // reserved1
   if (pin > 0) {
     payloadCfg[4] = 1; // enable PIO combined fence state
   } else {
     payloadCfg[4] = 0; // disable PIO combined fence state
   }
-  payloadCfg[5] = pinPolarity; // PIO pin polarity (0 = low means inside, 1 =
-                               // low means outside (or unknown))
+  payloadCfg[5] = pinPolarity; // PIO pin polarity (0 = low means inside, 1
+                               // = low means outside (or unknown))
   payloadCfg[6] = pin;         // PIO pin
   payloadCfg[7] = 0;           // reserved2
   payloadCfg[8] = currentGeofenceParams->lats[0] & 0xFF;
@@ -5042,15 +5117,17 @@ bool SFE_UBLOX_GNSS::addGeofence(int32_t latitude, int32_t longitude,
     payloadCfg[55] = currentGeofenceParams->rads[3] >> 24;
   }
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Clear all geofences using UBX-CFG-GEOFENCE
 bool SFE_UBLOX_GNSS::clearGeofences(uint16_t maxWait) {
-  if(!currentGeofenceParams)
-    initGeofenceParams();               // Check if RAM has been allocated for
-                                        // currentGeofenceParams
-  if(!currentGeofenceParams) // Abort if the RAM allocation failed
+  if (!currentGeofenceParams)
+    initGeofenceParams();     // Check if RAM has been allocated for
+                              // currentGeofenceParams
+  if (!currentGeofenceParams) // Abort if the RAM allocation
+                              // failed
     return false;
 
   packetCfg.cls = UBX_CLASS_CFG;
@@ -5063,8 +5140,8 @@ bool SFE_UBLOX_GNSS::clearGeofences(uint16_t maxWait) {
   payloadCfg[2] = 0; // confLvl
   payloadCfg[3] = 0; // reserved1
   payloadCfg[4] = 0; // disable PIO combined fence state
-  payloadCfg[5] = 0; // PIO pin polarity (0 = low means inside, 1 = low means
-                     // outside (or unknown))
+  payloadCfg[5] = 0; // PIO pin polarity (0 = low means inside,
+                     // 1 = low means outside (or unknown))
   payloadCfg[6] = 0; // PIO pin
   payloadCfg[7] = 0; // reserved2
 
@@ -5072,12 +5149,13 @@ bool SFE_UBLOX_GNSS::clearGeofences(uint16_t maxWait) {
       0; // Zero the number of geofences currently in use
 
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Clear the antenna control settings using UBX-CFG-ANT
-// This function is hopefully redundant but may be needed to release
-// any PIO pins pre-allocated for antenna functions
+// This function is hopefully redundant but may be needed to
+// release any PIO pins pre-allocated for antenna functions
 bool SFE_UBLOX_GNSS::clearAntPIO(uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_ANT;
@@ -5086,13 +5164,14 @@ bool SFE_UBLOX_GNSS::clearAntPIO(uint16_t maxWait) {
 
   payloadCfg[0] = 0x10; // Antenna flag mask: set the recovery bit
   payloadCfg[1] = 0;
-  payloadCfg[2] =
-      0xFF; // Antenna pin configuration: set pinSwitch and pinSCD to 31
-  payloadCfg[3] =
-      0xFF; // Antenna pin configuration: set pinOCD to 31, set reconfig bit
+  payloadCfg[2] = 0xFF; // Antenna pin configuration: set
+                        // pinSwitch and pinSCD to 31
+  payloadCfg[3] = 0xFF; // Antenna pin configuration: set pinOCD
+                        // to 31, set reconfig bit
 
   return ((sendCommand(&packetCfg, maxWait)) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Returns the combined geofence state using UBX-NAV-GEOFENCE
@@ -5105,14 +5184,15 @@ bool SFE_UBLOX_GNSS::getGeofenceState(geofenceState &currentGeofenceState,
 
   // Ask module for the geofence status. Loads into payloadCfg.
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
     return false;
 
   currentGeofenceState.status = payloadCfg[5]; // Extract the status
   currentGeofenceState.numFences =
       payloadCfg[6]; // Extract the number of geofences
-  currentGeofenceState.combState =
-      payloadCfg[7]; // Extract the combined state of all geofences
+  currentGeofenceState.combState = payloadCfg[7]; // Extract the combined state
+                                                  // of all geofences
   if (currentGeofenceState.numFences > 0)
     currentGeofenceState.states[0] = payloadCfg[8]; // Extract geofence 1 state
   if (currentGeofenceState.numFences > 1)
@@ -5125,15 +5205,15 @@ bool SFE_UBLOX_GNSS::getGeofenceState(geofenceState &currentGeofenceState,
   return true;
 }
 
-// PRIVATE: Allocate RAM for currentGeofenceParams and initialize it
+// PRIVATE: Allocate RAM for currentGeofenceParams and
+// initialize it
 bool SFE_UBLOX_GNSS::initGeofenceParams() {
   currentGeofenceParams =
       new geofenceParams_t; // Allocate RAM for the main struct
-  if(!currentGeofenceParams) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!currentGeofenceParams) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initGeofenceParams: RAM alloc failed!"));
+    }
     return false;
   }
   currentGeofenceParams->numFences = 0;
@@ -5143,21 +5223,12 @@ bool SFE_UBLOX_GNSS::initGeofenceParams() {
 // Power Save Mode
 // Enables/Disables Low Power Mode using UBX-CFG-RXM
 bool SFE_UBLOX_GNSS::powerSaveMode(bool power_save, uint16_t maxWait) {
-  // Let's begin by checking the Protocol Version as UBX_CFG_RXM is not
-  // supported on the ZED (protocol >= 27)
+  // Let's begin by checking the Protocol Version as UBX_CFG_RXM
+  // is not supported on the ZED (protocol >= 27)
   uint8_t protVer = getProtocolVersionHigh(maxWait);
-  /*
-  if (_printDebug == true)
-  {
-    _debugSerial->print(F("Protocol version is "));
-    _debugSerial->println(protVer);
-  }
-  */
+
   if (protVer >= 27) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-    {
+    if (isDebugLimited()) {
       _debugSerial->println(F("powerSaveMode (UBX-CFG-RXM) is not supported by "
                               "this protocol version"));
     }
@@ -5170,10 +5241,11 @@ bool SFE_UBLOX_GNSS::powerSaveMode(bool power_save, uint16_t maxWait) {
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // Ask module for the current power management settings. Loads into
-  // payloadCfg.
+  // Ask module for the current power management settings. Loads
+  // into payloadCfg.
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
     return false;
 
   if (power_save) {
@@ -5186,27 +5258,27 @@ bool SFE_UBLOX_GNSS::powerSaveMode(bool power_save, uint16_t maxWait) {
   packetCfg.startingSpot = 0;
 
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Get Power Save Mode
 // Returns the current Low Power Mode using UBX-CFG-RXM
 // Returns 255 if the sendCommand fails
 uint8_t SFE_UBLOX_GNSS::getPowerSaveMode(uint16_t maxWait) {
-  // Let's begin by checking the Protocol Version as UBX_CFG_RXM is not
-  // supported on the ZED (protocol >= 27)
+  // Let's begin by checking the Protocol Version as UBX_CFG_RXM
+  // is not supported on the ZED (protocol >= 27)
   uint8_t protVer = getProtocolVersionHigh(maxWait);
   /*
-  if (_printDebug == true)
+  if (isDebugDetailed())
   {
     _debugSerial->print(F("Protocol version is "));
     _debugSerial->println(protVer);
   }
   */
   if (protVer >= 27) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+    if ((isDebugDetailed()) ||
+if (isDebugLimited()) 
     {
       _debugSerial->println(F("powerSaveMode (UBX-CFG-RXM) is not supported by "
                               "this protocol version"));
@@ -5220,24 +5292,26 @@ uint8_t SFE_UBLOX_GNSS::getPowerSaveMode(uint16_t maxWait) {
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // Ask module for the current power management settings. Loads into
-  // payloadCfg.
+  // Ask module for the current power management settings. Loads
+  // into payloadCfg.
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
     return (255);
 
   return (payloadCfg[1]); // Return the low power mode
 }
 
-// Powers off the GPS device for a given duration to reduce power consumption.
-// NOTE: Querying the device before the duration is complete, for example by
-// "getLatitude()" will wake it up! Returns true if command has not been not
-// acknowledged. Returns false if command has not been acknowledged or maxWait =
-// 0.
+// Powers off the GPS device for a given duration to reduce
+// power consumption. NOTE: Querying the device before the
+// duration is complete, for example by "getLatitude()" will
+// wake it up! Returns true if command has not been not
+// acknowledged. Returns false if command has not been
+// acknowledged or maxWait = 0.
 bool SFE_UBLOX_GNSS::powerOff(uint32_t durationInMs, uint16_t maxWait) {
   // use durationInMs = 0 for infinite duration
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("Powering off for "));
     _debugSerial->print(durationInMs);
     _debugSerial->println(" ms");
@@ -5267,25 +5341,28 @@ bool SFE_UBLOX_GNSS::powerOff(uint32_t durationInMs, uint16_t maxWait) {
     return (sendCommand(&packetCfg, maxWait) != SFE_UBLOX_STATUS_COMMAND_NACK);
   } else {
     sendCommand(&packetCfg, maxWait);
-    return false; // can't tell if command not acknowledged if maxWait = 0
+    return false; // can't tell if command not acknowledged if
+                  // maxWait = 0
   }
 }
 
-// Powers off the GPS device for a given duration to reduce power consumption.
-// While powered off it can be woken up by creating a falling or rising voltage
-// edge on the specified pin. NOTE: The GPS seems to be sensitve to signals on
-// the pins while powered off. Works best when Microcontroller is in deepsleep.
-// NOTE: Querying the device before the duration is complete, for example by
-// "getLatitude()" will wake it up! Returns true if command has not been not
-// acknowledged. Returns false if command has not been acknowledged or maxWait =
-// 0.
+// Powers off the GPS device for a given duration to reduce
+// power consumption. While powered off it can be woken up by
+// creating a falling or rising voltage edge on the specified
+// pin. NOTE: The GPS seems to be sensitve to signals on the
+// pins while powered off. Works best when Microcontroller is in
+// deepsleep. NOTE: Querying the device before the duration is
+// complete, for example by "getLatitude()" will wake it up!
+// Returns true if command has not been not acknowledged.
+// Returns false if command has not been acknowledged or maxWait
+// = 0.
 bool SFE_UBLOX_GNSS::powerOffWithInterrupt(uint32_t durationInMs,
                                            uint32_t wakeupSources,
                                            bool forceWhileUsb,
                                            uint16_t maxWait) {
   // use durationInMs = 0 for infinite duration
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("Powering off for "));
     _debugSerial->print(durationInMs);
     _debugSerial->println(" ms");
@@ -5318,8 +5395,8 @@ bool SFE_UBLOX_GNSS::powerOffWithInterrupt(uint32_t durationInMs,
   if (forceWhileUsb) {
     payloadCfg[8] = 0x06; // force | backup
   } else {
-    payloadCfg[8] = 0x02; // backup only (leave the force bit clear - module
-                          // will stay on if USB is connected)
+    payloadCfg[8] = 0x02; // backup only (leave the force bit clear -
+                          // module will stay on if USB is connected)
   }
 
   payloadCfg[9] = 0x00;
@@ -5328,7 +5405,8 @@ bool SFE_UBLOX_GNSS::powerOffWithInterrupt(uint32_t durationInMs,
 
   // wakeUpSources
 
-  // wakeupPin mapping, defaults to VAL_RXM_PMREQ_WAKEUPSOURCE_EXTINT0
+  // wakeupPin mapping, defaults to
+  // VAL_RXM_PMREQ_WAKEUPSOURCE_EXTINT0
 
   // Possible values are:
   // VAL_RXM_PMREQ_WAKEUPSOURCE_UARTRX
@@ -5346,7 +5424,8 @@ bool SFE_UBLOX_GNSS::powerOffWithInterrupt(uint32_t durationInMs,
     return (sendCommand(&packetCfg, maxWait) != SFE_UBLOX_STATUS_COMMAND_NACK);
   } else {
     sendCommand(&packetCfg, maxWait);
-    return false; // can't tell if command not acknowledged if maxWait = 0
+    return false; // can't tell if command not acknowledged if
+                  // maxWait = 0
   }
 }
 
@@ -5365,10 +5444,11 @@ bool SFE_UBLOX_GNSS::setDynamicModel(dynModel newDynamicModel,
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // Ask module for the current navigation model settings. Loads into
-  // payloadCfg.
+  // Ask module for the current navigation model settings. Loads
+  // into payloadCfg.
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
     return false;
 
   payloadCfg[0] = 0x01;            // mask: set only the dyn bit (0)
@@ -5379,7 +5459,8 @@ bool SFE_UBLOX_GNSS::setDynamicModel(dynModel newDynamicModel,
   packetCfg.startingSpot = 0;
 
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Get the dynamic platform model using UBX-CFG-NAV5
@@ -5390,10 +5471,11 @@ uint8_t SFE_UBLOX_GNSS::getDynamicModel(uint16_t maxWait) {
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // Ask module for the current navigation model settings. Loads into
-  // payloadCfg.
+  // Ask module for the current navigation model settings. Loads
+  // into payloadCfg.
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
     return (DYN_MODEL_UNKNOWN);
 
   return (payloadCfg[2]); // Return the dynamic model
@@ -5406,10 +5488,11 @@ bool SFE_UBLOX_GNSS::resetOdometer(uint16_t maxWait) {
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // This is a special case as we are only expecting an ACK but this is not a
-  // CFG message
+  // This is a special case as we are only expecting an ACK but
+  // this is not a CFG message
   return (sendCommand(&packetCfg, maxWait, true) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Enable/Disable individual GNSS systems using UBX-CFG-GNSS
@@ -5421,7 +5504,8 @@ bool SFE_UBLOX_GNSS::enableGNSS(bool enable, sfe_ublox_gnss_ids_e id,
   packetCfg.startingSpot = 0;
 
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
     return false;
 
   uint8_t numConfigBlocks = payloadCfg[3]; // Extract the numConfigBlocks
@@ -5430,20 +5514,22 @@ bool SFE_UBLOX_GNSS::enableGNSS(bool enable, sfe_ublox_gnss_ids_e id,
        block++) // Check each configuration block
   {
     if (payloadCfg[(block * 8) + 4] ==
-        (uint8_t)id) // Check the gnssId for this block. Do we have a match?
+        (uint8_t)id) // Check the gnssId for this block. Do we
+                     // have a match?
     {
       // We have a match so set/clear the enable bit in flags
       if (enable)
         payloadCfg[(block * 8) + 4 + 4] |=
             0x01; // Set the enable bit in flags (Little Endian)
       else
-        payloadCfg[(block * 8) + 4 + 4] &=
-            0xFE; // Clear the enable bit in flags (Little Endian)
+        payloadCfg[(block * 8) + 4 + 4] &= 0xFE; // Clear the enable bit in
+                                                 // flags (Little Endian)
     }
   }
 
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Check if an individual GNSS system is enabled
@@ -5454,7 +5540,8 @@ bool SFE_UBLOX_GNSS::isGNSSenabled(sfe_ublox_gnss_ids_e id, uint16_t maxWait) {
   packetCfg.startingSpot = 0;
 
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
     return false;
 
   bool retVal = false;
@@ -5465,7 +5552,8 @@ bool SFE_UBLOX_GNSS::isGNSSenabled(sfe_ublox_gnss_ids_e id, uint16_t maxWait) {
        block++) // Check each configuration block
   {
     if (payloadCfg[(block * 8) + 4] ==
-        (uint8_t)id) // Check the gnssId for this block. Do we have a match?
+        (uint8_t)id) // Check the gnssId for this block. Do we
+                     // have a match?
     {
       // We have a match so check the enable bit in flags
       if ((payloadCfg[(block * 8) + 4 + 4] & 0x01) >
@@ -5484,14 +5572,16 @@ bool SFE_UBLOX_GNSS::resetIMUalignment(uint16_t maxWait) {
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // This is a special case as we are only expecting an ACK but this is not a
-  // CFG message
+  // This is a special case as we are only expecting an ACK but
+  // this is not a CFG message
   return (sendCommand(&packetCfg, maxWait, true) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
-// UBX-CFG-ESFALG is not documented. This was found using u-center.
-// Returns the state of the UBX-CFG-ESFALG 'Automatic IMU-mount Alignment' flag
+// UBX-CFG-ESFALG is not documented. This was found using
+// u-center. Returns the state of the UBX-CFG-ESFALG 'Automatic
+// IMU-mount Alignment' flag
 bool SFE_UBLOX_GNSS::getESFAutoAlignment(uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_ESFALG;
@@ -5500,7 +5590,7 @@ bool SFE_UBLOX_GNSS::getESFAutoAlignment(uint16_t maxWait) {
 
   if (sendCommand(&packetCfg, maxWait) != SFE_UBLOX_STATUS_DATA_RECEIVED) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("getESFAutoAlignment failed"));
     }
 #endif
@@ -5511,7 +5601,8 @@ bool SFE_UBLOX_GNSS::getESFAutoAlignment(uint16_t maxWait) {
   return (payloadCfg[1] & 0b1); // Return Bit 0
 }
 
-// Set the state of the UBX-CFG-ESFALG 'Automatic IMU-mount Alignment' flag
+// Set the state of the UBX-CFG-ESFALG 'Automatic IMU-mount
+// Alignment' flag
 bool SFE_UBLOX_GNSS::setESFAutoAlignment(bool enable, uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_ESFALG;
@@ -5520,7 +5611,7 @@ bool SFE_UBLOX_GNSS::setESFAutoAlignment(bool enable, uint16_t maxWait) {
 
   if (sendCommand(&packetCfg, maxWait) != SFE_UBLOX_STATUS_DATA_RECEIVED) {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("getESFAutoAlignment failed"));
     }
 #endif
@@ -5536,10 +5627,11 @@ bool SFE_UBLOX_GNSS::setESFAutoAlignment(bool enable, uint16_t maxWait) {
     payloadCfg[1] &= ~(0b1);
 
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_SENT) // This time we are only expecting an ACK
+      SFE_UBLOX_STATUS_DATA_SENT) // This time we are only
+                                  // expecting an ACK
   {
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true) {
+    if (isDebugDetailed()) {
       _debugSerial->println(F("setESFAutoAlignment failed"));
     }
 #endif
@@ -5552,8 +5644,9 @@ bool SFE_UBLOX_GNSS::setESFAutoAlignment(bool enable, uint16_t maxWait) {
 // Get the time pulse parameters using UBX_CFG_TP5
 bool SFE_UBLOX_GNSS::getTimePulseParameters(UBX_CFG_TP5_data_t *data,
                                             uint16_t maxWait) {
-  if(!data) // Check if the user forgot to include the data pointer
-    return false;    // Bail
+  if (!data)      // Check if the user forgot to include the data
+                  // pointer
+    return false; // Bail
 
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_TP5;
@@ -5561,7 +5654,8 @@ bool SFE_UBLOX_GNSS::getTimePulseParameters(UBX_CFG_TP5_data_t *data,
   packetCfg.startingSpot = 0;
 
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
     return false;
 
   // Extract the data
@@ -5582,8 +5676,9 @@ bool SFE_UBLOX_GNSS::getTimePulseParameters(UBX_CFG_TP5_data_t *data,
 // Set the time pulse parameters using UBX_CFG_TP5
 bool SFE_UBLOX_GNSS::setTimePulseParameters(UBX_CFG_TP5_data_t *data,
                                             uint16_t maxWait) {
-  if(!data) // Check if the user forgot to include the data pointer
-    return false;    // Bail
+  if (!data)      // Check if the user forgot to include the data
+                  // pointer
+    return false; // Bail
 
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_TP5;
@@ -5623,7 +5718,8 @@ bool SFE_UBLOX_GNSS::setTimePulseParameters(UBX_CFG_TP5_data_t *data,
   payloadCfg[31] = (data->flags.all >> 24) & 0xFF;
 
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // CONFIGURATION INTERFACE (protocol v27 and above)
@@ -5637,16 +5733,17 @@ uint32_t SFE_UBLOX_GNSS::createKey(uint16_t group, uint16_t id, uint8_t size) {
   return (key);
 }
 
-// Given a key, load the payload with data that can then be extracted to 8, 16,
-// or 32 bits This function takes a full 32-bit key Default layer is RAM
-// Configuration of modern u-blox modules is now done via getVal/setVal/delVal,
-// ie protocol v27 and above found on ZED-F9P
+// Given a key, load the payload with data that can then be
+// extracted to 8, 16, or 32 bits This function takes a full
+// 32-bit key Default layer is RAM Configuration of modern
+// u-blox modules is now done via getVal/setVal/delVal, ie
+// protocol v27 and above found on ZED-F9P
 sfe_ublox_status_e SFE_UBLOX_GNSS::getVal(uint32_t key, uint8_t layer,
                                           uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_VALGET;
-  packetCfg.len = 4 + 4 * 1; // While multiple keys are allowed, we will send
-                             // only one key at a time
+  packetCfg.len = 4 + 4 * 1; // While multiple keys are allowed, we
+                             // will send only one key at a time
   packetCfg.startingSpot = 0;
 
   // Clear packet payload
@@ -5655,8 +5752,8 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::getVal(uint32_t key, uint8_t layer,
   // VALGET uses different memory layer definitions to VALSET
   // because it can only return the value for one layer.
   // So we need to fiddle the layer here.
-  // And just to complicate things further, the ZED-F9P only responds
-  // correctly to layer 0 (RAM) and layer 7 (Default)!
+  // And just to complicate things further, the ZED-F9P only
+  // responds correctly to layer 0 (RAM) and layer 7 (Default)!
   uint8_t getLayer = 7; // 7 is the "Default Layer"
   if ((layer & VAL_LAYER_RAM) ==
       VAL_LAYER_RAM) // Did the user request the RAM layer?
@@ -5674,7 +5771,7 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::getVal(uint32_t key, uint8_t layer,
   payloadCfg[7] = key >> 8 * 3;
 
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("key: 0x"));
     _debugSerial->print(key, HEX);
     _debugSerial->println();
@@ -5685,26 +5782,28 @@ sfe_ublox_status_e SFE_UBLOX_GNSS::getVal(uint32_t key, uint8_t layer,
 
   sfe_ublox_status_e retVal = sendCommand(&packetCfg, maxWait);
 #ifndef SFE_UBLOX_REDUCED_PROG_MEM
-  if (_printDebug == true) {
+  if (isDebugDetailed()) {
     _debugSerial->print(F("getVal: sendCommand returned: "));
     _debugSerial->println(statusString(retVal));
   }
 #endif
 
-  // Verify the response is the correct length as compared to what the user
-  // called (did the module respond with 8-bits but the user called getVal32?)
-  // Response is 8 bytes plus cfg data
-  // if(packet->len > 8+1)
+  // Verify the response is the correct length as compared to
+  // what the user called (did the module respond with 8-bits
+  // but the user called getVal32?) Response is 8 bytes plus cfg
+  // data if(packet->len > 8+1)
 
-  // The response is now sitting in payload, ready for extraction
+  // The response is now sitting in payload, ready for
+  // extraction
   return (retVal);
 }
 
 // Given a key, return its value
 // This function takes a full 32-bit key
 // Default layer is RAM
-// Configuration of modern u-blox modules is now done via getVal/setVal/delVal,
-// ie protocol v27 and above found on ZED-F9P
+// Configuration of modern u-blox modules is now done via
+// getVal/setVal/delVal, ie protocol v27 and above found on
+// ZED-F9P
 uint8_t SFE_UBLOX_GNSS::getVal8(uint32_t key, uint8_t layer, uint16_t maxWait) {
   if (getVal(key, layer, maxWait) != SFE_UBLOX_STATUS_DATA_RECEIVED)
     return (0);
@@ -5726,10 +5825,11 @@ uint32_t SFE_UBLOX_GNSS::getVal32(uint32_t key, uint8_t layer,
   return (extractLong(&packetCfg, 8));
 }
 
-// Given a group, ID and size, return the value of this config spot
-// The 32-bit key is put together from group/ID/size. See other getVal to send
-// key directly. Configuration of modern u-blox modules is now done via
-// getVal/setVal/delVal, ie protocol v27 and above found on ZED-F9P
+// Given a group, ID and size, return the value of this config
+// spot The 32-bit key is put together from group/ID/size. See
+// other getVal to send key directly. Configuration of modern
+// u-blox modules is now done via getVal/setVal/delVal, ie
+// protocol v27 and above found on ZED-F9P
 uint8_t SFE_UBLOX_GNSS::getVal8(uint16_t group, uint16_t id, uint8_t size,
                                 uint8_t layer, uint16_t maxWait) {
   uint32_t key = createKey(group, id, size);
@@ -5749,8 +5849,9 @@ uint32_t SFE_UBLOX_GNSS::getVal32(uint16_t group, uint16_t id, uint8_t size,
 // Given a key, set a 16-bit value
 // This function takes a full 32-bit key
 // Default layer is all: RAM+BBR+Flash
-// Configuration of modern u-blox modules is now done via getVal/setVal/delVal,
-// ie protocol v27 and above found on ZED-F9P
+// Configuration of modern u-blox modules is now done via
+// getVal/setVal/delVal, ie protocol v27 and above found on
+// ZED-F9P
 uint8_t SFE_UBLOX_GNSS::setVal(uint32_t key, uint16_t value, uint8_t layer,
                                uint16_t maxWait) {
   return setVal16(key, value, layer, maxWait);
@@ -5759,8 +5860,9 @@ uint8_t SFE_UBLOX_GNSS::setVal(uint32_t key, uint16_t value, uint8_t layer,
 // Given a key, set a 16-bit value
 // This function takes a full 32-bit key
 // Default layer is all: RAM+BBR+Flash
-// Configuration of modern u-blox modules is now done via getVal/setVal/delVal,
-// ie protocol v27 and above found on ZED-F9P
+// Configuration of modern u-blox modules is now done via
+// getVal/setVal/delVal, ie protocol v27 and above found on
+// ZED-F9P
 uint8_t SFE_UBLOX_GNSS::setVal16(uint32_t key, uint16_t value, uint8_t layer,
                                  uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
@@ -5786,14 +5888,16 @@ uint8_t SFE_UBLOX_GNSS::setVal16(uint32_t key, uint16_t value, uint8_t layer,
 
   // Send VALSET command with this key and value
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Given a key, set an 8-bit value
 // This function takes a full 32-bit key
 // Default layer is all: RAM+BBR+Flash
-// Configuration of modern u-blox modules is now done via getVal/setVal/delVal,
-// ie protocol v27 and above found on ZED-F9P
+// Configuration of modern u-blox modules is now done via
+// getVal/setVal/delVal, ie protocol v27 and above found on
+// ZED-F9P
 uint8_t SFE_UBLOX_GNSS::setVal8(uint32_t key, uint8_t value, uint8_t layer,
                                 uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
@@ -5818,14 +5922,16 @@ uint8_t SFE_UBLOX_GNSS::setVal8(uint32_t key, uint8_t value, uint8_t layer,
 
   // Send VALSET command with this key and value
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Given a key, set a 32-bit value
 // This function takes a full 32-bit key
 // Default layer is all: RAM+BBR+Flash
-// Configuration of modern u-blox modules is now done via getVal/setVal/delVal,
-// ie protocol v27 and above found on ZED-F9P
+// Configuration of modern u-blox modules is now done via
+// getVal/setVal/delVal, ie protocol v27 and above found on
+// ZED-F9P
 uint8_t SFE_UBLOX_GNSS::setVal32(uint32_t key, uint32_t value, uint8_t layer,
                                  uint16_t maxWait) {
   packetCfg.cls = UBX_CLASS_CFG;
@@ -5853,14 +5959,16 @@ uint8_t SFE_UBLOX_GNSS::setVal32(uint32_t key, uint32_t value, uint8_t layer,
 
   // Send VALSET command with this key and value
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
 // Start defining a new UBX-CFG-VALSET ubxPacket
 // This function takes a full 32-bit key and 32-bit value
 // Default layer is BBR
-// Configuration of modern u-blox modules is now done via getVal/setVal/delVal,
-// ie protocol v27 and above found on ZED-F9P
+// Configuration of modern u-blox modules is now done via
+// getVal/setVal/delVal, ie protocol v27 and above found on
+// ZED-F9P
 uint8_t SFE_UBLOX_GNSS::newCfgValset32(uint32_t key, uint32_t value,
                                        uint8_t layer) {
   packetCfg.cls = UBX_CLASS_CFG;
@@ -5893,8 +6001,9 @@ uint8_t SFE_UBLOX_GNSS::newCfgValset32(uint32_t key, uint32_t value,
 // Start defining a new UBX-CFG-VALSET ubxPacket
 // This function takes a full 32-bit key and 16-bit value
 // Default layer is BBR
-// Configuration of modern u-blox modules is now done via getVal/setVal/delVal,
-// ie protocol v27 and above found on ZED-F9P
+// Configuration of modern u-blox modules is now done via
+// getVal/setVal/delVal, ie protocol v27 and above found on
+// ZED-F9P
 uint8_t SFE_UBLOX_GNSS::newCfgValset16(uint32_t key, uint16_t value,
                                        uint8_t layer) {
   packetCfg.cls = UBX_CLASS_CFG;
@@ -5925,8 +6034,9 @@ uint8_t SFE_UBLOX_GNSS::newCfgValset16(uint32_t key, uint16_t value,
 // Start defining a new UBX-CFG-VALSET ubxPacket
 // This function takes a full 32-bit key and 8-bit value
 // Default layer is BBR
-// Configuration of modern u-blox modules is now done via getVal/setVal/delVal,
-// ie protocol v27 and above found on ZED-F9P
+// Configuration of modern u-blox modules is now done via
+// getVal/setVal/delVal, ie protocol v27 and above found on
+// ZED-F9P
 uint8_t SFE_UBLOX_GNSS::newCfgValset8(uint32_t key, uint8_t value,
                                       uint8_t layer) {
   packetCfg.cls = UBX_CLASS_CFG;
@@ -5953,8 +6063,9 @@ uint8_t SFE_UBLOX_GNSS::newCfgValset8(uint32_t key, uint8_t value,
   return true;
 }
 
-// Add another keyID and value to an existing UBX-CFG-VALSET ubxPacket
-// This function takes a full 32-bit key and 32-bit value
+// Add another keyID and value to an existing UBX-CFG-VALSET
+// ubxPacket This function takes a full 32-bit key and 32-bit
+// value
 uint8_t SFE_UBLOX_GNSS::addCfgValset32(uint32_t key, uint32_t value) {
   // Load key into outgoing payload
   payloadCfg[packetCfg.len + 0] = key >> 8 * 0; // Key LSB
@@ -5975,8 +6086,9 @@ uint8_t SFE_UBLOX_GNSS::addCfgValset32(uint32_t key, uint32_t value) {
   return true;
 }
 
-// Add another keyID and value to an existing UBX-CFG-VALSET ubxPacket
-// This function takes a full 32-bit key and 16-bit value
+// Add another keyID and value to an existing UBX-CFG-VALSET
+// ubxPacket This function takes a full 32-bit key and 16-bit
+// value
 uint8_t SFE_UBLOX_GNSS::addCfgValset16(uint32_t key, uint16_t value) {
   // Load key into outgoing payload
   payloadCfg[packetCfg.len + 0] = key >> 8 * 0; // Key LSB
@@ -5995,8 +6107,9 @@ uint8_t SFE_UBLOX_GNSS::addCfgValset16(uint32_t key, uint16_t value) {
   return true;
 }
 
-// Add another keyID and value to an existing UBX-CFG-VALSET ubxPacket
-// This function takes a full 32-bit key and 8-bit value
+// Add another keyID and value to an existing UBX-CFG-VALSET
+// ubxPacket This function takes a full 32-bit key and 8-bit
+// value
 uint8_t SFE_UBLOX_GNSS::addCfgValset8(uint32_t key, uint8_t value) {
   // Load key into outgoing payload
   payloadCfg[packetCfg.len + 0] = key >> 8 * 0; // Key LSB
@@ -6014,8 +6127,9 @@ uint8_t SFE_UBLOX_GNSS::addCfgValset8(uint32_t key, uint8_t value) {
   return true;
 }
 
-// Add a final keyID and value to an existing UBX-CFG-VALSET ubxPacket and send
-// it This function takes a full 32-bit key and 32-bit value
+// Add a final keyID and value to an existing UBX-CFG-VALSET
+// ubxPacket and send it This function takes a full 32-bit key
+// and 32-bit value
 uint8_t SFE_UBLOX_GNSS::sendCfgValset32(uint32_t key, uint32_t value,
                                         uint16_t maxWait) {
   // Load keyID and value into outgoing payload
@@ -6023,11 +6137,13 @@ uint8_t SFE_UBLOX_GNSS::sendCfgValset32(uint32_t key, uint32_t value,
 
   // Send VALSET command with this key and value
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
-// Add a final keyID and value to an existing UBX-CFG-VALSET ubxPacket and send
-// it This function takes a full 32-bit key and 16-bit value
+// Add a final keyID and value to an existing UBX-CFG-VALSET
+// ubxPacket and send it This function takes a full 32-bit key
+// and 16-bit value
 uint8_t SFE_UBLOX_GNSS::sendCfgValset16(uint32_t key, uint16_t value,
                                         uint16_t maxWait) {
   // Load keyID and value into outgoing payload
@@ -6035,11 +6151,13 @@ uint8_t SFE_UBLOX_GNSS::sendCfgValset16(uint32_t key, uint16_t value,
 
   // Send VALSET command with this key and value
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
-// Add a final keyID and value to an existing UBX-CFG-VALSET ubxPacket and send
-// it This function takes a full 32-bit key and 8-bit value
+// Add a final keyID and value to an existing UBX-CFG-VALSET
+// ubxPacket and send it This function takes a full 32-bit key
+// and 8-bit value
 uint8_t SFE_UBLOX_GNSS::sendCfgValset8(uint32_t key, uint8_t value,
                                        uint16_t maxWait) {
   // Load keyID and value into outgoing payload
@@ -6047,25 +6165,27 @@ uint8_t SFE_UBLOX_GNSS::sendCfgValset8(uint32_t key, uint8_t value,
 
   // Send VALSET command with this key and value
   return (sendCommand(&packetCfg, maxWait) ==
-          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+          SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting
+                                       // an ACK
 }
 
-//=-=-=-=-=-=-=-= "Automatic" Messages =-=-=-=-=-=-=-==-=-=-=-=-=-=-=
+//=-=-=-=-=-=-=-= "Automatic" Messages
+//=-=-=-=-=-=-=-==-=-=-=-=-=-=-=
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 // ***** NAV POSECEF automatic support
 
 bool SFE_UBLOX_GNSS::getNAVPOSECEF(uint16_t maxWait) {
-  if(!packetUBXNAVPOSECEF)
-    initPacketUBXNAVPOSECEF(); // Check that RAM has been allocated for the
-                               // POSECEF data
-  if(!packetUBXNAVPOSECEF) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPOSECEF)
+    initPacketUBXNAVPOSECEF(); // Check that RAM has been
+                               // allocated for the POSECEF data
+  if (!packetUBXNAVPOSECEF)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVPOSECEF->automaticFlags.flags.bits.automatic &&
       packetUBXNAVPOSECEF->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_POSECEF);
     return packetUBXNAVPOSECEF->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVPOSECEF->automaticFlags.flags.bits.automatic &&
@@ -6073,8 +6193,8 @@ bool SFE_UBLOX_GNSS::getNAVPOSECEF(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_POSECEF;
     packetCfg.len = 0;
@@ -6094,27 +6214,28 @@ bool SFE_UBLOX_GNSS::getNAVPOSECEF(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getPOSECEF works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getPOSECEF works.
 bool SFE_UBLOX_GNSS::setAutoNAVPOSECEF(bool enable, uint16_t maxWait) {
   return setAutoNAVPOSECEFrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getPOSECEF works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getPOSECEF works.
 bool SFE_UBLOX_GNSS::setAutoNAVPOSECEF(bool enable, bool implicitUpdate,
                                        uint16_t maxWait) {
   return setAutoNAVPOSECEFrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getPOSECEF works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getPOSECEF works.
 bool SFE_UBLOX_GNSS::setAutoNAVPOSECEFrate(uint8_t rate, bool implicitUpdate,
                                            uint16_t maxWait) {
-  if(!packetUBXNAVPOSECEF)
-    initPacketUBXNAVPOSECEF(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVPOSECEF ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVPOSECEF)
+    initPacketUBXNAVPOSECEF();        // Check that RAM has been
+                                      // allocated for the data
+  if (packetUBXNAVPOSECEF == nullptr) // Only attempt this if RAM
+                                      // allocation was successful
     return false;
 
   if (rate > 127)
@@ -6129,7 +6250,8 @@ bool SFE_UBLOX_GNSS::setAutoNAVPOSECEFrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVPOSECEF->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVPOSECEF->automaticFlags.flags.bits.implicitUpdate =
@@ -6142,24 +6264,25 @@ bool SFE_UBLOX_GNSS::setAutoNAVPOSECEFrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoNAVPOSECEFcallback(
     void (*callbackPointer)(UBX_NAV_POSECEF_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoNAVPOSECEF(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVPOSECEF->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXNAVPOSECEF->callbackData =
-        new UBX_NAV_POSECEF_data_t; // Allocate RAM for the main struct
+        new UBX_NAV_POSECEF_data_t; // Allocate RAM for the main
+                                    // struct
   }
 
-  if(!packetUBXNAVPOSECEF->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVPOSECEF->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoNAVPOSECEFcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -6167,13 +6290,14 @@ bool SFE_UBLOX_GNSS::setAutoNAVPOSECEFcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and POSECEF is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and POSECEF
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoNAVPOSECEF(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVPOSECEF)
-    initPacketUBXNAVPOSECEF(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVPOSECEF ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVPOSECEF)
+    initPacketUBXNAVPOSECEF();        // Check that RAM has been
+                                      // allocated for the data
+  if (packetUBXNAVPOSECEF == nullptr) // Only attempt this if RAM
+                                      // allocation was successful
     return false;
 
   bool changes =
@@ -6188,15 +6312,14 @@ bool SFE_UBLOX_GNSS::assumeAutoNAVPOSECEF(bool enabled, bool implicitUpdate) {
   return changes;
 }
 
-// PRIVATE: Allocate RAM for packetUBXNAVPOSECEF and initialize it
+// PRIVATE: Allocate RAM for packetUBXNAVPOSECEF and initialize
+// it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVPOSECEF() {
   packetUBXNAVPOSECEF =
       new UBX_NAV_POSECEF_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVPOSECEF) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-      _debugSerial->println(F("initPacketUBXNAVPOSECEF: RAM alloc failed!"));
+  if (!packetUBXNAVPOSECEF) {
+if (isDebugLimited()) {
+      _debugSerial->println(F("initPacketUBXNAVPOSECEF: RAM alloc failed!"));}
     return false;
   }
   packetUBXNAVPOSECEF->automaticFlags.flags.all = 0;
@@ -6206,22 +6329,22 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVPOSECEF() {
   return true;
 }
 
-// Mark all the data as read/stale. This is handy to get data alignment after
-// CRC failure or if there are no helper functions and the user wants to request
-// fresh data
+// Mark all the data as read/stale. This is handy to get data
+// alignment after CRC failure or if there are no helper
+// functions and the user wants to request fresh data
 void SFE_UBLOX_GNSS::flushNAVPOSECEF() {
-  if(!packetUBXNAVPOSECEF)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVPOSECEF)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVPOSECEF->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVPOSECEF(bool enabled) {
-  if(!packetUBXNAVPOSECEF)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVPOSECEF)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVPOSECEF->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -6229,16 +6352,16 @@ void SFE_UBLOX_GNSS::logNAVPOSECEF(bool enabled) {
 // ***** NAV STATUS automatic support
 
 bool SFE_UBLOX_GNSS::getNAVSTATUS(uint16_t maxWait) {
-  if(!packetUBXNAVSTATUS)
-    initPacketUBXNAVSTATUS(); // Check that RAM has been allocated for the
-                              // STATUS data
-  if(!packetUBXNAVSTATUS) // Bail if the RAM allocation failed
+  if (!packetUBXNAVSTATUS)
+    initPacketUBXNAVSTATUS(); // Check that RAM has been
+                              // allocated for the STATUS data
+  if (!packetUBXNAVSTATUS)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVSTATUS->automaticFlags.flags.bits.automatic &&
       packetUBXNAVSTATUS->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_STATUS);
     return packetUBXNAVSTATUS->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVSTATUS->automaticFlags.flags.bits.automatic &&
@@ -6246,8 +6369,8 @@ bool SFE_UBLOX_GNSS::getNAVSTATUS(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_STATUS;
     packetCfg.len = 0;
@@ -6267,27 +6390,28 @@ bool SFE_UBLOX_GNSS::getNAVSTATUS(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getNAVSTATUS works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getNAVSTATUS works.
 bool SFE_UBLOX_GNSS::setAutoNAVSTATUS(bool enable, uint16_t maxWait) {
   return setAutoNAVSTATUSrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getNAVSTATUS works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getNAVSTATUS works.
 bool SFE_UBLOX_GNSS::setAutoNAVSTATUS(bool enable, bool implicitUpdate,
                                       uint16_t maxWait) {
   return setAutoNAVSTATUSrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getNAVSTATUS works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getNAVSTATUS works.
 bool SFE_UBLOX_GNSS::setAutoNAVSTATUSrate(uint8_t rate, bool implicitUpdate,
                                           uint16_t maxWait) {
-  if(!packetUBXNAVSTATUS)
-    initPacketUBXNAVSTATUS(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVSTATUS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVSTATUS)
+    initPacketUBXNAVSTATUS();        // Check that RAM has been
+                                     // allocated for the data
+  if (packetUBXNAVSTATUS == nullptr) // Only attempt this if RAM
+                                     // allocation was successful
     return false;
 
   if (rate > 127)
@@ -6302,7 +6426,8 @@ bool SFE_UBLOX_GNSS::setAutoNAVSTATUSrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVSTATUS->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVSTATUS->automaticFlags.flags.bits.implicitUpdate =
@@ -6315,24 +6440,25 @@ bool SFE_UBLOX_GNSS::setAutoNAVSTATUSrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoNAVSTATUScallback(
     void (*callbackPointer)(UBX_NAV_STATUS_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoNAVSTATUS(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVSTATUS->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXNAVSTATUS->callbackData =
-        new UBX_NAV_STATUS_data_t; // Allocate RAM for the main struct
+        new UBX_NAV_STATUS_data_t; // Allocate RAM for the main
+                                   // struct
   }
 
-  if(!packetUBXNAVSTATUS->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVSTATUS->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoNAVSTATUScallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -6340,13 +6466,14 @@ bool SFE_UBLOX_GNSS::setAutoNAVSTATUScallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and STATUS is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and STATUS
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoNAVSTATUS(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVSTATUS)
-    initPacketUBXNAVSTATUS(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVSTATUS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVSTATUS)
+    initPacketUBXNAVSTATUS();        // Check that RAM has been
+                                     // allocated for the data
+  if (packetUBXNAVSTATUS == nullptr) // Only attempt this if RAM
+                                     // allocation was successful
     return false;
 
   bool changes =
@@ -6361,14 +6488,13 @@ bool SFE_UBLOX_GNSS::assumeAutoNAVSTATUS(bool enabled, bool implicitUpdate) {
   return changes;
 }
 
-// PRIVATE: Allocate RAM for packetUBXNAVSTATUS and initialize it
+// PRIVATE: Allocate RAM for packetUBXNAVSTATUS and initialize
+// it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVSTATUS() {
   packetUBXNAVSTATUS = new UBX_NAV_STATUS_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVSTATUS) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-      _debugSerial->println(F("initPacketUBXNAVSTATUS: RAM alloc failed!"));
+  if (!packetUBXNAVSTATUS) {
+if (isDebugLimited()) {
+      _debugSerial->println(F("initPacketUBXNAVSTATUS: RAM alloc failed!"));}
     return false;
   }
   packetUBXNAVSTATUS->automaticFlags.flags.all = 0;
@@ -6378,22 +6504,22 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVSTATUS() {
   return true;
 }
 
-// Mark all the data as read/stale. This is handy to get data alignment after
-// CRC failure or if there are no helper functions and the user wants to request
-// fresh data
+// Mark all the data as read/stale. This is handy to get data
+// alignment after CRC failure or if there are no helper
+// functions and the user wants to request fresh data
 void SFE_UBLOX_GNSS::flushNAVSTATUS() {
-  if(!packetUBXNAVSTATUS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVSTATUS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVSTATUS->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVSTATUS(bool enabled) {
-  if(!packetUBXNAVSTATUS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVSTATUS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVSTATUS->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -6401,37 +6527,26 @@ void SFE_UBLOX_GNSS::logNAVSTATUS(bool enabled) {
 // ***** DOP automatic support
 
 bool SFE_UBLOX_GNSS::getDOP(uint16_t maxWait) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the DOP data
-  if(!packetUBXNAVDOP) // Bail if the RAM allocation failed
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP(); // Check that RAM has been allocated
+                           // for the DOP data
+  if (!packetUBXNAVDOP)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVDOP->automaticFlags.flags.bits.automatic &&
       packetUBXNAVDOP->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getDOP: Autoreporting"));
-    //  }
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_DOP);
     return packetUBXNAVDOP->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVDOP->automaticFlags.flags.bits.automatic &&
              !packetUBXNAVDOP->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getDOP: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getDOP: Polling"));
-    // }
 
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_DOP;
     packetCfg.len = 0;
@@ -6444,44 +6559,35 @@ bool SFE_UBLOX_GNSS::getDOP(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getDOP: data in packetCfg was OVERWRITTEN by
-      //   another message (but that's OK)"));
-      // }
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getDOP retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getDOP works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getDOP works.
 bool SFE_UBLOX_GNSS::setAutoDOP(bool enable, uint16_t maxWait) {
   return setAutoDOPrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getDOP works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getDOP works.
 bool SFE_UBLOX_GNSS::setAutoDOP(bool enable, bool implicitUpdate,
                                 uint16_t maxWait) {
   return setAutoDOPrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getDOP works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getDOP works.
 bool SFE_UBLOX_GNSS::setAutoDOPrate(uint8_t rate, bool implicitUpdate,
                                     uint16_t maxWait) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVDOP ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP();        // Check that RAM has been allocated
+                                  // for the data
+  if (packetUBXNAVDOP == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   packetCfg.cls = UBX_CLASS_CFG;
@@ -6493,7 +6599,8 @@ bool SFE_UBLOX_GNSS::setAutoDOPrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVDOP->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVDOP->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -6505,24 +6612,24 @@ bool SFE_UBLOX_GNSS::setAutoDOPrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoDOPcallback(
     void (*callbackPointer)(UBX_NAV_DOP_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoDOP(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVDOP->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXNAVDOP->callbackData =
-        new UBX_NAV_DOP_data_t; // Allocate RAM for the main struct
+    packetUBXNAVDOP->callbackData = new UBX_NAV_DOP_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXNAVDOP->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVDOP->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoDOPcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -6530,13 +6637,14 @@ bool SFE_UBLOX_GNSS::setAutoDOPcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and DOP is send cyclically
-// already set config to suitable parameters
+// In case no config access to the GNSS is possible and DOP is
+// send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoDOP(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVDOP ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP();        // Check that RAM has been allocated
+                                  // for the data
+  if (packetUBXNAVDOP == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   bool changes =
@@ -6553,11 +6661,10 @@ bool SFE_UBLOX_GNSS::assumeAutoDOP(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXNAVDOP and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVDOP() {
   packetUBXNAVDOP = new UBX_NAV_DOP_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVDOP) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVDOP) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVDOP: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVDOP->automaticFlags.flags.all = 0;
@@ -6567,21 +6674,21 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVDOP() {
   return true;
 }
 
-// Mark all the DOP data as read/stale. This is handy to get data alignment
-// after CRC failure
+// Mark all the DOP data as read/stale. This is handy to get
+// data alignment after CRC failure
 void SFE_UBLOX_GNSS::flushDOP() {
-  if(!packetUBXNAVDOP)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVDOP)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVDOP->moduleQueried.moduleQueried.all =
       0; // Mark all DOPs as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVDOP(bool enabled) {
-  if(!packetUBXNAVDOP)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVDOP)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVDOP->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
@@ -6592,17 +6699,17 @@ bool SFE_UBLOX_GNSS::getVehAtt(uint16_t maxWait) {
 }
 
 bool SFE_UBLOX_GNSS::getNAVATT(uint16_t maxWait) {
-  if(!packetUBXNAVATT)
-    initPacketUBXNAVATT(); // Check that RAM has been allocated for the ESF RAW
-                           // data
-  if (packetUBXNAVATT ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVATT)
+    initPacketUBXNAVATT();        // Check that RAM has been allocated
+                                  // for the ESF RAW data
+  if (packetUBXNAVATT == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   if (packetUBXNAVATT->automaticFlags.flags.bits.automatic &&
       packetUBXNAVATT->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_ATT);
     return packetUBXNAVATT->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVATT->automaticFlags.flags.bits.automatic &&
@@ -6610,8 +6717,8 @@ bool SFE_UBLOX_GNSS::getNAVATT(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting HNR PVT so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting HNR PVT so we have
+    // to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_ATT;
     packetCfg.len = 0;
@@ -6633,27 +6740,28 @@ bool SFE_UBLOX_GNSS::getNAVATT(uint16_t maxWait) {
   return false; // Trap. We should never get here...
 }
 
-// Enable or disable automatic NAV ATT message generation by the GNSS. This
-// changes the way getVehAtt works.
+// Enable or disable automatic NAV ATT message generation by the
+// GNSS. This changes the way getVehAtt works.
 bool SFE_UBLOX_GNSS::setAutoNAVATT(bool enable, uint16_t maxWait) {
   return setAutoNAVATTrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic NAV ATT message generation by the GNSS. This
-// changes the way getVehAtt works.
+// Enable or disable automatic NAV ATT message generation by the
+// GNSS. This changes the way getVehAtt works.
 bool SFE_UBLOX_GNSS::setAutoNAVATT(bool enable, bool implicitUpdate,
                                    uint16_t maxWait) {
   return setAutoNAVATTrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic NAV ATT attitude message generation by the GNSS.
-// This changes the way getVehAtt works.
+// Enable or disable automatic NAV ATT attitude message
+// generation by the GNSS. This changes the way getVehAtt works.
 bool SFE_UBLOX_GNSS::setAutoNAVATTrate(uint8_t rate, bool implicitUpdate,
                                        uint16_t maxWait) {
-  if(!packetUBXNAVATT)
-    initPacketUBXNAVATT(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVATT ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVATT)
+    initPacketUBXNAVATT();        // Check that RAM has been allocated
+                                  // for the data
+  if (packetUBXNAVATT == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   if (rate > 127)
@@ -6668,7 +6776,8 @@ bool SFE_UBLOX_GNSS::setAutoNAVATTrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVATT->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVATT->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -6681,24 +6790,24 @@ bool SFE_UBLOX_GNSS::setAutoNAVATTrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoNAVATTcallback(
     void (*callbackPointer)(UBX_NAV_ATT_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoNAVATT(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVATT->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXNAVATT->callbackData =
-        new UBX_NAV_ATT_data_t; // Allocate RAM for the main struct
+    packetUBXNAVATT->callbackData = new UBX_NAV_ATT_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXNAVATT->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVATT->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoNAVATTcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -6706,14 +6815,15 @@ bool SFE_UBLOX_GNSS::setAutoNAVATTcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and NAV ATT attitude is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and NAV ATT
+// attitude is send cyclically already set config to suitable
+// parameters
 bool SFE_UBLOX_GNSS::assumeAutoNAVATT(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVATT)
-    initPacketUBXNAVATT(); // Check that RAM has been allocated for the ESF RAW
-                           // data
-  if (packetUBXNAVATT ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVATT)
+    initPacketUBXNAVATT();        // Check that RAM has been allocated
+                                  // for the ESF RAW data
+  if (packetUBXNAVATT == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   bool changes =
@@ -6730,11 +6840,10 @@ bool SFE_UBLOX_GNSS::assumeAutoNAVATT(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXNAVATT and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVATT() {
   packetUBXNAVATT = new UBX_NAV_ATT_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVATT) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVATT) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVATT: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVATT->automaticFlags.flags.all = 0;
@@ -6744,38 +6853,40 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVATT() {
   return true;
 }
 
-// Mark all the DOP data as read/stale. This is handy to get data alignment
-// after CRC failure
+// Mark all the DOP data as read/stale. This is handy to get
+// data alignment after CRC failure
 void SFE_UBLOX_GNSS::flushNAVATT() {
-  if(!packetUBXNAVATT)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVATT)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVATT->moduleQueried.moduleQueried.all =
       0; // Mark all DOPs as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVATT(bool enabled) {
-  if(!packetUBXNAVATT)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVATT)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVATT->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
 // ***** PVT automatic support
 
-// Get the latest Position/Velocity/Time solution and fill all global variables
+// Get the latest Position/Velocity/Time solution and fill all
+// global variables
 bool SFE_UBLOX_GNSS::getPVT(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVPVT->automaticFlags.flags.bits.automatic &&
       packetUBXNAVPVT->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
+    //  if (isDebugDetailed())
     //  {
     //    _debugSerial->println(F("getPVT: Autoreporting"));
     //  }
@@ -6784,26 +6895,18 @@ bool SFE_UBLOX_GNSS::getPVT(uint16_t maxWait) {
   } else if (packetUBXNAVPVT->automaticFlags.flags.bits.automatic &&
              !packetUBXNAVPVT->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getPVT: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getPVT: Polling"));
-    // }
 
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_PVT;
     packetCfg.len = 0;
     packetCfg.startingSpot = 0;
-    // packetCfg.startingSpot = 20; //Begin listening at spot 20 so we can
-    // record up to 20+packetCfgPayloadSize = 84 bytes Note:now hard-coded in
-    // processUBX
+    // packetCfg.startingSpot = 20; //Begin listening at spot 20
+    // so we can record up to 20+packetCfgPayloadSize = 84 bytes
+    // Note:now hard-coded in processUBX
 
     // The data is parsed as part of processing the response
     sfe_ublox_status_e retVal = sendCommand(&packetCfg, maxWait);
@@ -6812,44 +6915,35 @@ bool SFE_UBLOX_GNSS::getPVT(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getPVT: data in packetCfg was OVERWRITTEN by
-      //   another message (but that's OK)"));
-      // }
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getPVT retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getPVT works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getPVT works.
 bool SFE_UBLOX_GNSS::setAutoPVT(bool enable, uint16_t maxWait) {
   return setAutoPVTrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getPVT works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getPVT works.
 bool SFE_UBLOX_GNSS::setAutoPVT(bool enable, bool implicitUpdate,
                                 uint16_t maxWait) {
   return setAutoPVTrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getPVT works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getPVT works.
 bool SFE_UBLOX_GNSS::setAutoPVTrate(uint8_t rate, bool implicitUpdate,
                                     uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if (packetUBXNAVPVT ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT();        // Check that RAM has been allocated
+                                  // for the PVT data
+  if (packetUBXNAVPVT == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   if (rate > 127)
@@ -6864,7 +6958,8 @@ bool SFE_UBLOX_GNSS::setAutoPVTrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVPVT->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVPVT->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -6873,44 +6968,46 @@ bool SFE_UBLOX_GNSS::setAutoPVTrate(uint8_t rate, bool implicitUpdate,
   return ok;
 }
 
-// Enable automatic navigation message generation by the GNSS. This changes the
-// way getPVT works.
+// Enable automatic navigation message generation by the GNSS.
+// This changes the way getPVT works.
 bool SFE_UBLOX_GNSS::setAutoPVTcallback(
     void (*callbackPointer)(UBX_NAV_PVT_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoPVT(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAutoPVT failed
 
   if (packetUBXNAVPVT->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXNAVPVT->callbackData =
-        new UBX_NAV_PVT_data_t; // Allocate RAM for the main struct
+    packetUBXNAVPVT->callbackData = new UBX_NAV_PVT_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXNAVPVT->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVPVT->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoPVTcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
   packetUBXNAVPVT->callbackPointer =
-      callbackPointer; // RAM has been allocated so now update the pointer
+      callbackPointer; // RAM has been allocated so now update
+                       // the pointer
 
   return true;
 }
 
-// In case no config access to the GNSS is possible and PVT is send cyclically
-// already set config to suitable parameters
+// In case no config access to the GNSS is possible and PVT is
+// send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoPVT(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if (packetUBXNAVPVT ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT();        // Check that RAM has been allocated
+                                  // for the PVT data
+  if (packetUBXNAVPVT == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   bool changes =
@@ -6927,11 +7024,10 @@ bool SFE_UBLOX_GNSS::assumeAutoPVT(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXNAVPVT and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVPVT() {
   packetUBXNAVPVT = new UBX_NAV_PVT_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVPVT) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVPVT) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVPVT: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVPVT->automaticFlags.flags.all = 0;
@@ -6942,12 +7038,12 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVPVT() {
   return true;
 }
 
-// Mark all the PVT data as read/stale. This is handy to get data alignment
-// after CRC failure
+// Mark all the PVT data as read/stale. This is handy to get
+// data alignment after CRC failure
 void SFE_UBLOX_GNSS::flushPVT() {
-  if(!packetUBXNAVPVT)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVPVT)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVPVT->moduleQueried.moduleQueried1.all =
       0; // Mark all datums as stale (read before)
   packetUBXNAVPVT->moduleQueried.moduleQueried2.all = 0;
@@ -6955,24 +7051,25 @@ void SFE_UBLOX_GNSS::flushPVT() {
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVPVT(bool enabled) {
-  if(!packetUBXNAVPVT)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVPVT)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVPVT->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
 // ***** NAV ODO automatic support
 
 bool SFE_UBLOX_GNSS::getNAVODO(uint16_t maxWait) {
-  if(!packetUBXNAVODO)
-    initPacketUBXNAVODO(); // Check that RAM has been allocated for the ODO data
-  if(!packetUBXNAVODO) // Bail if the RAM allocation failed
+  if (!packetUBXNAVODO)
+    initPacketUBXNAVODO(); // Check that RAM has been allocated
+                           // for the ODO data
+  if (!packetUBXNAVODO)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVODO->automaticFlags.flags.bits.automatic &&
       packetUBXNAVODO->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_ODO);
     return packetUBXNAVODO->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVODO->automaticFlags.flags.bits.automatic &&
@@ -6980,8 +7077,8 @@ bool SFE_UBLOX_GNSS::getNAVODO(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_ODO;
     packetCfg.len = 0;
@@ -7001,27 +7098,28 @@ bool SFE_UBLOX_GNSS::getNAVODO(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getODO works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getODO works.
 bool SFE_UBLOX_GNSS::setAutoNAVODO(bool enable, uint16_t maxWait) {
   return setAutoNAVODOrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getODO works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getODO works.
 bool SFE_UBLOX_GNSS::setAutoNAVODO(bool enable, bool implicitUpdate,
                                    uint16_t maxWait) {
   return setAutoNAVODOrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getODO works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getODO works.
 bool SFE_UBLOX_GNSS::setAutoNAVODOrate(uint8_t rate, bool implicitUpdate,
                                        uint16_t maxWait) {
-  if(!packetUBXNAVODO)
-    initPacketUBXNAVODO(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVODO ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVODO)
+    initPacketUBXNAVODO();        // Check that RAM has been allocated
+                                  // for the data
+  if (packetUBXNAVODO == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   if (rate > 127)
@@ -7036,7 +7134,8 @@ bool SFE_UBLOX_GNSS::setAutoNAVODOrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVODO->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVODO->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -7048,24 +7147,24 @@ bool SFE_UBLOX_GNSS::setAutoNAVODOrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoNAVODOcallback(
     void (*callbackPointer)(UBX_NAV_ODO_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoNAVODO(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVODO->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXNAVODO->callbackData =
-        new UBX_NAV_ODO_data_t; // Allocate RAM for the main struct
+    packetUBXNAVODO->callbackData = new UBX_NAV_ODO_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXNAVODO->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVODO->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoNAVODOcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -7073,13 +7172,14 @@ bool SFE_UBLOX_GNSS::setAutoNAVODOcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and ODO is send cyclically
-// already set config to suitable parameters
+// In case no config access to the GNSS is possible and ODO is
+// send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoNAVODO(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVODO)
-    initPacketUBXNAVODO(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVODO ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVODO)
+    initPacketUBXNAVODO();        // Check that RAM has been allocated
+                                  // for the data
+  if (packetUBXNAVODO == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   bool changes =
@@ -7096,11 +7196,10 @@ bool SFE_UBLOX_GNSS::assumeAutoNAVODO(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXNAVODO and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVODO() {
   packetUBXNAVODO = new UBX_NAV_ODO_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVODO) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVODO) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVODO: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVODO->automaticFlags.flags.all = 0;
@@ -7112,34 +7211,34 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVODO() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushNAVODO() {
-  if(!packetUBXNAVODO)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVODO)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVODO->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVODO(bool enabled) {
-  if(!packetUBXNAVODO)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVODO)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVODO->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
 // ***** NAV VELECEF automatic support
 
 bool SFE_UBLOX_GNSS::getNAVVELECEF(uint16_t maxWait) {
-  if(!packetUBXNAVVELECEF)
-    initPacketUBXNAVVELECEF(); // Check that RAM has been allocated for the
-                               // VELECEF data
-  if(!packetUBXNAVVELECEF) // Bail if the RAM allocation failed
+  if (!packetUBXNAVVELECEF)
+    initPacketUBXNAVVELECEF(); // Check that RAM has been
+                               // allocated for the VELECEF data
+  if (!packetUBXNAVVELECEF)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVVELECEF->automaticFlags.flags.bits.automatic &&
       packetUBXNAVVELECEF->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_VELECEF);
     return packetUBXNAVVELECEF->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVVELECEF->automaticFlags.flags.bits.automatic &&
@@ -7147,8 +7246,8 @@ bool SFE_UBLOX_GNSS::getNAVVELECEF(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_VELECEF;
     packetCfg.len = 0;
@@ -7168,27 +7267,28 @@ bool SFE_UBLOX_GNSS::getNAVVELECEF(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getVELECEF works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getVELECEF works.
 bool SFE_UBLOX_GNSS::setAutoNAVVELECEF(bool enable, uint16_t maxWait) {
   return setAutoNAVVELECEFrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getVELECEF works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getVELECEF works.
 bool SFE_UBLOX_GNSS::setAutoNAVVELECEF(bool enable, bool implicitUpdate,
                                        uint16_t maxWait) {
   return setAutoNAVVELECEFrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getVELECEF works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getVELECEF works.
 bool SFE_UBLOX_GNSS::setAutoNAVVELECEFrate(uint8_t rate, bool implicitUpdate,
                                            uint16_t maxWait) {
-  if(!packetUBXNAVVELECEF)
-    initPacketUBXNAVVELECEF(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVVELECEF ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVVELECEF)
+    initPacketUBXNAVVELECEF();        // Check that RAM has been
+                                      // allocated for the data
+  if (packetUBXNAVVELECEF == nullptr) // Only attempt this if RAM
+                                      // allocation was successful
     return false;
 
   if (rate > 127)
@@ -7203,7 +7303,8 @@ bool SFE_UBLOX_GNSS::setAutoNAVVELECEFrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVVELECEF->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVVELECEF->automaticFlags.flags.bits.implicitUpdate =
@@ -7216,24 +7317,24 @@ bool SFE_UBLOX_GNSS::setAutoNAVVELECEFrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoNAVVELECEFcallback(
     void (*callbackPointer)(UBX_NAV_VELECEF_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoNAVVELECEF(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVVELECEF->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXNAVVELECEF->callbackData =
-        new UBX_NAV_VELECEF_data_t; // Allocate RAM for the main struct
+        new UBX_NAV_VELECEF_data_t; // Allocate RAM for the main
+                                    // struct
   }
 
-  if(!packetUBXNAVVELECEF->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-      _debugSerial->println(F("setAutoNAVVELECEFcallback: RAM alloc failed!"));
+  if (!packetUBXNAVVELECEF->callbackData) {
+if (isDebugLimited()) {
+      _debugSerial->println(F("setAutoNAVVELECEFcallback: RAM alloc failed!"));}
     return false;
   }
 
@@ -7241,13 +7342,14 @@ bool SFE_UBLOX_GNSS::setAutoNAVVELECEFcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and VELECEF is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and VELECEF
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoNAVVELECEF(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVVELECEF)
-    initPacketUBXNAVVELECEF(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVVELECEF ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVVELECEF)
+    initPacketUBXNAVVELECEF();        // Check that RAM has been
+                                      // allocated for the data
+  if (packetUBXNAVVELECEF == nullptr) // Only attempt this if RAM
+                                      // allocation was successful
     return false;
 
   bool changes =
@@ -7262,15 +7364,15 @@ bool SFE_UBLOX_GNSS::assumeAutoNAVVELECEF(bool enabled, bool implicitUpdate) {
   return changes;
 }
 
-// PRIVATE: Allocate RAM for packetUBXNAVVELECEF and initialize it
+// PRIVATE: Allocate RAM for packetUBXNAVVELECEF and initialize
+// it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVVELECEF() {
   packetUBXNAVVELECEF =
       new UBX_NAV_VELECEF_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVVELECEF) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVVELECEF) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVVELECEF: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVVELECEF->automaticFlags.flags.all = 0;
@@ -7282,18 +7384,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVVELECEF() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushNAVVELECEF() {
-  if(!packetUBXNAVVELECEF)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVVELECEF)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVVELECEF->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVVELECEF(bool enabled) {
-  if(!packetUBXNAVVELECEF)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVVELECEF)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVVELECEF->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -7301,16 +7403,16 @@ void SFE_UBLOX_GNSS::logNAVVELECEF(bool enabled) {
 // ***** NAV VELNED automatic support
 
 bool SFE_UBLOX_GNSS::getNAVVELNED(uint16_t maxWait) {
-  if(!packetUBXNAVVELNED)
-    initPacketUBXNAVVELNED(); // Check that RAM has been allocated for the
-                              // VELNED data
-  if(!packetUBXNAVVELNED) // Bail if the RAM allocation failed
+  if (!packetUBXNAVVELNED)
+    initPacketUBXNAVVELNED(); // Check that RAM has been
+                              // allocated for the VELNED data
+  if (!packetUBXNAVVELNED)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVVELNED->automaticFlags.flags.bits.automatic &&
       packetUBXNAVVELNED->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_VELNED);
     return packetUBXNAVVELNED->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVVELNED->automaticFlags.flags.bits.automatic &&
@@ -7318,8 +7420,8 @@ bool SFE_UBLOX_GNSS::getNAVVELNED(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_VELNED;
     packetCfg.len = 0;
@@ -7339,27 +7441,28 @@ bool SFE_UBLOX_GNSS::getNAVVELNED(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getVELNED works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getVELNED works.
 bool SFE_UBLOX_GNSS::setAutoNAVVELNED(bool enable, uint16_t maxWait) {
   return setAutoNAVVELNEDrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getVELNED works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getVELNED works.
 bool SFE_UBLOX_GNSS::setAutoNAVVELNED(bool enable, bool implicitUpdate,
                                       uint16_t maxWait) {
   return setAutoNAVVELNEDrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getVELNED works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getVELNED works.
 bool SFE_UBLOX_GNSS::setAutoNAVVELNEDrate(uint8_t rate, bool implicitUpdate,
                                           uint16_t maxWait) {
-  if(!packetUBXNAVVELNED)
-    initPacketUBXNAVVELNED(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVVELNED ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVVELNED)
+    initPacketUBXNAVVELNED();        // Check that RAM has been
+                                     // allocated for the data
+  if (packetUBXNAVVELNED == nullptr) // Only attempt this if RAM
+                                     // allocation was successful
     return false;
 
   packetCfg.cls = UBX_CLASS_CFG;
@@ -7371,7 +7474,8 @@ bool SFE_UBLOX_GNSS::setAutoNAVVELNEDrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVVELNED->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVVELNED->automaticFlags.flags.bits.implicitUpdate =
@@ -7384,24 +7488,25 @@ bool SFE_UBLOX_GNSS::setAutoNAVVELNEDrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoNAVVELNEDcallback(
     void (*callbackPointer)(UBX_NAV_VELNED_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoNAVVELNED(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVVELNED->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXNAVVELNED->callbackData =
-        new UBX_NAV_VELNED_data_t; // Allocate RAM for the main struct
+        new UBX_NAV_VELNED_data_t; // Allocate RAM for the main
+                                   // struct
   }
 
-  if(!packetUBXNAVVELNED->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVVELNED->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoNAVVELNEDcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -7409,13 +7514,14 @@ bool SFE_UBLOX_GNSS::setAutoNAVVELNEDcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and VELNED is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and VELNED
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoNAVVELNED(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVVELNED)
-    initPacketUBXNAVVELNED(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVVELNED ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVVELNED)
+    initPacketUBXNAVVELNED();        // Check that RAM has been
+                                     // allocated for the data
+  if (packetUBXNAVVELNED == nullptr) // Only attempt this if RAM
+                                     // allocation was successful
     return false;
 
   bool changes =
@@ -7430,14 +7536,14 @@ bool SFE_UBLOX_GNSS::assumeAutoNAVVELNED(bool enabled, bool implicitUpdate) {
   return changes;
 }
 
-// PRIVATE: Allocate RAM for packetUBXNAVVELNED and initialize it
+// PRIVATE: Allocate RAM for packetUBXNAVVELNED and initialize
+// it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVVELNED() {
   packetUBXNAVVELNED = new UBX_NAV_VELNED_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVVELNED) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVVELNED) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVVELNED: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVVELNED->automaticFlags.flags.all = 0;
@@ -7449,18 +7555,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVVELNED() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushNAVVELNED() {
-  if(!packetUBXNAVVELNED)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!
+  if (!packetUBXNAVVELNED)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!
   packetUBXNAVVELNED->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVVELNED(bool enabled) {
-  if(!packetUBXNAVVELNED)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVVELNED)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVVELNED->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -7468,16 +7574,18 @@ void SFE_UBLOX_GNSS::logNAVVELNED(bool enabled) {
 // ***** NAV HPPOSECEF automatic support
 
 bool SFE_UBLOX_GNSS::getNAVHPPOSECEF(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSECEF)
-    initPacketUBXNAVHPPOSECEF(); // Check that RAM has been allocated for the
-                                 // HPPOSECEF data
-  if(!packetUBXNAVHPPOSECEF) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSECEF)
+    initPacketUBXNAVHPPOSECEF(); // Check that RAM has been
+                                 // allocated for the HPPOSECEF
+                                 // data
+  if (!packetUBXNAVHPPOSECEF)    // Bail if the RAM allocation
+                                 // failed
     return false;
 
   if (packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.automatic &&
       packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_HPPOSECEF);
     return packetUBXNAVHPPOSECEF->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.automatic &&
@@ -7485,8 +7593,8 @@ bool SFE_UBLOX_GNSS::getNAVHPPOSECEF(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_HPPOSECEF;
     packetCfg.len = 0;
@@ -7506,28 +7614,28 @@ bool SFE_UBLOX_GNSS::getNAVHPPOSECEF(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getHPPOSECEF works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getHPPOSECEF works.
 bool SFE_UBLOX_GNSS::setAutoNAVHPPOSECEF(bool enable, uint16_t maxWait) {
   return setAutoNAVHPPOSECEFrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getHPPOSECEF works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getHPPOSECEF works.
 bool SFE_UBLOX_GNSS::setAutoNAVHPPOSECEF(bool enable, bool implicitUpdate,
                                          uint16_t maxWait) {
   return setAutoNAVHPPOSECEFrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getHPPOSECEF works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getHPPOSECEF works.
 bool SFE_UBLOX_GNSS::setAutoNAVHPPOSECEFrate(uint8_t rate, bool implicitUpdate,
                                              uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSECEF)
-    initPacketUBXNAVHPPOSECEF(); // Check that RAM has been allocated for the
-                                 // data
-  if (packetUBXNAVHPPOSECEF ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVHPPOSECEF)
+    initPacketUBXNAVHPPOSECEF(); // Check that RAM has been
+                                 // allocated for the data
+  if (!packetUBXNAVHPPOSECEF)    // Only attempt this if RAM
+                                 // allocation was successful
     return false;
 
   if (rate > 127)
@@ -7542,7 +7650,8 @@ bool SFE_UBLOX_GNSS::setAutoNAVHPPOSECEFrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.implicitUpdate =
@@ -7555,25 +7664,26 @@ bool SFE_UBLOX_GNSS::setAutoNAVHPPOSECEFrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoNAVHPPOSECEFcallback(
     void (*callbackPointer)(UBX_NAV_HPPOSECEF_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoNAVHPPOSECEF(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVHPPOSECEF->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXNAVHPPOSECEF->callbackData =
-        new UBX_NAV_HPPOSECEF_data_t; // Allocate RAM for the main struct
+        new UBX_NAV_HPPOSECEF_data_t; // Allocate RAM for the
+                                      // main struct
   }
 
-  if(!packetUBXNAVHPPOSECEF->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVHPPOSECEF->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(
           F("setAutoNAVHPPOSECEFcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -7581,14 +7691,15 @@ bool SFE_UBLOX_GNSS::setAutoNAVHPPOSECEFcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and HPPOSECEF is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and
+// HPPOSECEF is send cyclically already set config to suitable
+// parameters
 bool SFE_UBLOX_GNSS::assumeAutoNAVHPPOSECEF(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVHPPOSECEF)
-    initPacketUBXNAVHPPOSECEF(); // Check that RAM has been allocated for the
-                                 // data
-  if (packetUBXNAVHPPOSECEF ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVHPPOSECEF)
+    initPacketUBXNAVHPPOSECEF(); // Check that RAM has been
+                                 // allocated for the data
+  if (!packetUBXNAVHPPOSECEF)    // Only attempt this if RAM
+                                 // allocation was successful
     return false;
 
   bool changes =
@@ -7603,15 +7714,15 @@ bool SFE_UBLOX_GNSS::assumeAutoNAVHPPOSECEF(bool enabled, bool implicitUpdate) {
   return changes;
 }
 
-// PRIVATE: Allocate RAM for packetUBXNAVHPPOSECEF and initialize it
+// PRIVATE: Allocate RAM for packetUBXNAVHPPOSECEF and
+// initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVHPPOSECEF() {
-  packetUBXNAVHPPOSECEF =
-      new UBX_NAV_HPPOSECEF_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVHPPOSECEF) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  packetUBXNAVHPPOSECEF = new UBX_NAV_HPPOSECEF_t; // Allocate RAM for
+                                                   // the main struct
+  if (!packetUBXNAVHPPOSECEF) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVHPPOSECEF: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVHPPOSECEF->automaticFlags.flags.all = 0;
@@ -7623,18 +7734,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVHPPOSECEF() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushNAVHPPOSECEF() {
-  if(!packetUBXNAVHPPOSECEF)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVHPPOSECEF)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVHPPOSECEF->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVHPPOSECEF(bool enabled) {
-  if(!packetUBXNAVHPPOSECEF)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVHPPOSECEF)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVHPPOSECEF->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -7642,38 +7753,34 @@ void SFE_UBLOX_GNSS::logNAVHPPOSECEF(bool enabled) {
 // ***** NAV HPPOSLLH automatic support
 
 bool SFE_UBLOX_GNSS::getHPPOSLLH(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return false;
 
   if (packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.automatic &&
       packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
+    //  if (isDebugDetailed())
     //  {
-    //    _debugSerial->println(F("getHPPOSLLH: Autoreporting"));
+    //    _debugSerial->println(F("getHPPOSLLH:
+    //    Autoreporting"));
     //  }
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_HPPOSLLH);
     return packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.automatic &&
              !packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getHPPOSLLH: Exit immediately"));
-    //  }
+
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getHPPOSLLH: Polling"));
-    // }
 
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_HPPOSLLH;
     packetCfg.len = 0;
@@ -7686,45 +7793,35 @@ bool SFE_UBLOX_GNSS::getHPPOSLLH(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getHPPOSLLH: data in packetCfg was
-      //   OVERWRITTEN by another message (but that's OK)"));
-      // }
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getHPPOSLLH retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getHPPOSLLH works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getHPPOSLLH works.
 bool SFE_UBLOX_GNSS::setAutoHPPOSLLH(bool enable, uint16_t maxWait) {
   return setAutoHPPOSLLHrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getHPPOSLLH works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getHPPOSLLH works.
 bool SFE_UBLOX_GNSS::setAutoHPPOSLLH(bool enable, bool implicitUpdate,
                                      uint16_t maxWait) {
   return setAutoHPPOSLLHrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getHPPOSLLH works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getHPPOSLLH works.
 bool SFE_UBLOX_GNSS::setAutoHPPOSLLHrate(uint8_t rate, bool implicitUpdate,
                                          uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // data
-  if (packetUBXNAVHPPOSLLH ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the data
+  if (!packetUBXNAVHPPOSLLH)    // Only attempt this if RAM
+                                // allocation was successful
     return false;
 
   if (rate > 127)
@@ -7739,7 +7836,8 @@ bool SFE_UBLOX_GNSS::setAutoHPPOSLLHrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.implicitUpdate =
@@ -7752,24 +7850,25 @@ bool SFE_UBLOX_GNSS::setAutoHPPOSLLHrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoHPPOSLLHcallback(
     void (*callbackPointer)(UBX_NAV_HPPOSLLH_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoHPPOSLLH(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVHPPOSLLH->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXNAVHPPOSLLH->callbackData =
-        new UBX_NAV_HPPOSLLH_data_t; // Allocate RAM for the main struct
+        new UBX_NAV_HPPOSLLH_data_t; // Allocate RAM for the
+                                     // main struct
   }
 
-  if(!packetUBXNAVHPPOSLLH->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVHPPOSLLH->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoHPPOSLLHcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -7777,14 +7876,14 @@ bool SFE_UBLOX_GNSS::setAutoHPPOSLLHcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and HPPOSLLH is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and HPPOSLLH
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoHPPOSLLH(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // data
-  if (packetUBXNAVHPPOSLLH ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH();        // Check that RAM has been
+                                       // allocated for the data
+  if (packetUBXNAVHPPOSLLH == nullptr) // Only attempt this if RAM
+                                       // allocation was successful
     return false;
 
   bool changes =
@@ -7799,15 +7898,15 @@ bool SFE_UBLOX_GNSS::assumeAutoHPPOSLLH(bool enabled, bool implicitUpdate) {
   return changes;
 }
 
-// PRIVATE: Allocate RAM for packetUBXNAVHPPOSLLH and initialize it
+// PRIVATE: Allocate RAM for packetUBXNAVHPPOSLLH and initialize
+// it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVHPPOSLLH() {
-  packetUBXNAVHPPOSLLH =
-      new UBX_NAV_HPPOSLLH_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVHPPOSLLH) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  packetUBXNAVHPPOSLLH = new UBX_NAV_HPPOSLLH_t; // Allocate RAM for
+                                                 // the main struct
+  if (!packetUBXNAVHPPOSLLH) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVHPPOSLLH: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVHPPOSLLH->automaticFlags.flags.all = 0;
@@ -7817,21 +7916,21 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVHPPOSLLH() {
   return true;
 }
 
-// Mark all the HPPOSLLH data as read/stale. This is handy to get data alignment
-// after CRC failure
+// Mark all the HPPOSLLH data as read/stale. This is handy to
+// get data alignment after CRC failure
 void SFE_UBLOX_GNSS::flushHPPOSLLH() {
-  if(!packetUBXNAVHPPOSLLH)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!
+  if (!packetUBXNAVHPPOSLLH)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVHPPOSLLH(bool enabled) {
-  if(!packetUBXNAVHPPOSLLH)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVHPPOSLLH)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVHPPOSLLH->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -7839,16 +7938,16 @@ void SFE_UBLOX_GNSS::logNAVHPPOSLLH(bool enabled) {
 // ***** NAV CLOCK automatic support
 
 bool SFE_UBLOX_GNSS::getNAVCLOCK(uint16_t maxWait) {
-  if(!packetUBXNAVCLOCK)
-    initPacketUBXNAVCLOCK(); // Check that RAM has been allocated for the CLOCK
-                             // data
-  if(!packetUBXNAVCLOCK) // Bail if the RAM allocation failed
+  if (!packetUBXNAVCLOCK)
+    initPacketUBXNAVCLOCK(); // Check that RAM has been
+                             // allocated for the CLOCK data
+  if (!packetUBXNAVCLOCK)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVCLOCK->automaticFlags.flags.bits.automatic &&
       packetUBXNAVCLOCK->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_CLOCK);
     return packetUBXNAVCLOCK->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVCLOCK->automaticFlags.flags.bits.automatic &&
@@ -7856,8 +7955,8 @@ bool SFE_UBLOX_GNSS::getNAVCLOCK(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting CLOCK so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting CLOCK so we have
+    // to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_CLOCK;
     packetCfg.len = 0;
@@ -7877,27 +7976,28 @@ bool SFE_UBLOX_GNSS::getNAVCLOCK(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic CLOCK message generation by the GNSS. This
-// changes the way getNAVCLOCK works.
+// Enable or disable automatic CLOCK message generation by the
+// GNSS. This changes the way getNAVCLOCK works.
 bool SFE_UBLOX_GNSS::setAutoNAVCLOCK(bool enable, uint16_t maxWait) {
   return setAutoNAVCLOCKrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic CLOCK message generation by the GNSS. This
-// changes the way getNAVCLOCK works.
+// Enable or disable automatic CLOCK message generation by the
+// GNSS. This changes the way getNAVCLOCK works.
 bool SFE_UBLOX_GNSS::setAutoNAVCLOCK(bool enable, bool implicitUpdate,
                                      uint16_t maxWait) {
   return setAutoNAVCLOCKrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic CLOCK attitude message generation by the GNSS.
-// This changes the way getNAVCLOCK works.
+// Enable or disable automatic CLOCK attitude message generation
+// by the GNSS. This changes the way getNAVCLOCK works.
 bool SFE_UBLOX_GNSS::setAutoNAVCLOCKrate(uint8_t rate, bool implicitUpdate,
                                          uint16_t maxWait) {
-  if(!packetUBXNAVCLOCK)
-    initPacketUBXNAVCLOCK(); // Check that RAM has been allocated for the data
-  if (packetUBXNAVCLOCK ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVCLOCK)
+    initPacketUBXNAVCLOCK(); // Check that RAM has been
+                             // allocated for the data
+  if (!packetUBXNAVCLOCK)    // Only attempt this if RAM
+                             // allocation was successful
     return false;
 
   if (rate > 127)
@@ -7912,7 +8012,8 @@ bool SFE_UBLOX_GNSS::setAutoNAVCLOCKrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVCLOCK->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVCLOCK->automaticFlags.flags.bits.implicitUpdate =
@@ -7926,24 +8027,24 @@ bool SFE_UBLOX_GNSS::setAutoNAVCLOCKrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoNAVCLOCKcallback(
     void (*callbackPointer)(UBX_NAV_CLOCK_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoNAVCLOCK(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVCLOCK->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXNAVCLOCK->callbackData =
-        new UBX_NAV_CLOCK_data_t; // Allocate RAM for the main struct
+        new UBX_NAV_CLOCK_data_t; // Allocate RAM for the main
+                                  // struct
   }
 
-  if(!packetUBXNAVCLOCK->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
-      _debugSerial->println(F("setAutoNAVCLOCKcallback: RAM alloc failed!"));
+  if (!packetUBXNAVCLOCK->callbackData) {
+if (isDebugLimited()) {
+      _debugSerial->println(F("setAutoNAVCLOCKcallback: RAM alloc failed!"));}
     return false;
   }
 
@@ -7951,13 +8052,14 @@ bool SFE_UBLOX_GNSS::setAutoNAVCLOCKcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and HNR attitude is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and HNR
+// attitude is send cyclically already set config to suitable
+// parameters
 bool SFE_UBLOX_GNSS::assumeAutoNAVCLOCK(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVCLOCK)
-    initPacketUBXNAVCLOCK(); // Check that RAM has been allocated for the CLOCK
-                             // data
-  if(!packetUBXNAVCLOCK) // Bail if the RAM allocation failed
+  if (!packetUBXNAVCLOCK)
+    initPacketUBXNAVCLOCK(); // Check that RAM has been
+                             // allocated for the CLOCK data
+  if (!packetUBXNAVCLOCK)    // Bail if the RAM allocation failed
     return false;
 
   bool changes =
@@ -7975,11 +8077,10 @@ bool SFE_UBLOX_GNSS::assumeAutoNAVCLOCK(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXNAVCLOCK and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVCLOCK() {
   packetUBXNAVCLOCK = new UBX_NAV_CLOCK_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVCLOCK) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVCLOCK) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVCLOCK: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVCLOCK->automaticFlags.flags.all = 0;
@@ -7991,32 +8092,33 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVCLOCK() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushNAVCLOCK() {
-  if(!packetUBXNAVCLOCK)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVCLOCK)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVCLOCK->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVCLOCK(bool enabled) {
-  if(!packetUBXNAVCLOCK)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVCLOCK)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVCLOCK->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
 
 // ***** NAV TIMELS automatic support
 
-// Reads leap second event information and sets the global variables
-// for future leap second change and number of leap seconds since GPS epoch
-// Returns true if commands was successful
+// Reads leap second event information and sets the global
+// variables for future leap second change and number of leap
+// seconds since GPS epoch Returns true if commands was
+// successful
 bool SFE_UBLOX_GNSS::getLeapSecondEvent(uint16_t maxWait) {
-  if(!packetUBXNAVTIMELS)
-    initPacketUBXNAVTIMELS(); // Check that RAM has been allocated for the
-                              // TIMELS data
-  if(!packetUBXNAVTIMELS) // Abort if the RAM allocation failed
+  if (!packetUBXNAVTIMELS)
+    initPacketUBXNAVTIMELS(); // Check that RAM has been
+                              // allocated for the TIMELS data
+  if (!packetUBXNAVTIMELS)    // Abort if the RAM allocation failed
     return false;
 
   packetCfg.cls = UBX_CLASS_NAV;
@@ -8037,14 +8139,14 @@ bool SFE_UBLOX_GNSS::getLeapSecondEvent(uint16_t maxWait) {
   return false;
 }
 
-// PRIVATE: Allocate RAM for packetUBXNAVTIMELS and initialize it
+// PRIVATE: Allocate RAM for packetUBXNAVTIMELS and initialize
+// it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVTIMELS() {
   packetUBXNAVTIMELS = new UBX_NAV_TIMELS_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVTIMELS) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVTIMELS) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVTIMELS: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVTIMELS->automaticFlags.flags.all = 0;
@@ -8057,13 +8159,13 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVTIMELS() {
 // ***** NAV SVIN automatic support
 
 // Reads survey in status and sets the global variables
-// for status, position valid, observation time, and mean 3D StdDev
-// Returns true if commands was successful
+// for status, position valid, observation time, and mean 3D
+// StdDev Returns true if commands was successful
 bool SFE_UBLOX_GNSS::getSurveyStatus(uint16_t maxWait) {
-  if(!packetUBXNAVSVIN)
-    initPacketUBXNAVSVIN(); // Check that RAM has been allocated for the SVIN
-                            // data
-  if(!packetUBXNAVSVIN) // Abort if the RAM allocation failed
+  if (!packetUBXNAVSVIN)
+    initPacketUBXNAVSVIN(); // Check that RAM has been allocated
+                            // for the SVIN data
+  if (!packetUBXNAVSVIN)    // Abort if the RAM allocation failed
     return false;
 
   packetCfg.cls = UBX_CLASS_NAV;
@@ -8087,11 +8189,10 @@ bool SFE_UBLOX_GNSS::getSurveyStatus(uint16_t maxWait) {
 // PRIVATE: Allocate RAM for packetUBXNAVSVIN and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVSVIN() {
   packetUBXNAVSVIN = new UBX_NAV_SVIN_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVSVIN) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVSVIN) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVSVIN: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVSVIN->automaticFlags.flags.all = 0;
@@ -8107,18 +8208,21 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVSVIN() {
 // Returns true if commands was successful
 // Note:
 //   RELPOSNED on the M8 is only 40 bytes long
-//   RELPOSNED on the F9 is 64 bytes long and contains much more information
+//   RELPOSNED on the F9 is 64 bytes long and contains much more
+//   information
 bool SFE_UBLOX_GNSS::getRELPOSNED(uint16_t maxWait) {
-  if(!packetUBXNAVRELPOSNED)
-    initPacketUBXNAVRELPOSNED(); // Check that RAM has been allocated for the
-                                 // RELPOSNED data
-  if(!packetUBXNAVRELPOSNED) // Bail if the RAM allocation failed
+  if (!packetUBXNAVRELPOSNED)
+    initPacketUBXNAVRELPOSNED(); // Check that RAM has been
+                                 // allocated for the RELPOSNED
+                                 // data
+  if (!packetUBXNAVRELPOSNED)    // Bail if the RAM allocation
+                                 // failed
     return false;
 
   if (packetUBXNAVRELPOSNED->automaticFlags.flags.bits.automatic &&
       packetUBXNAVRELPOSNED->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_NAV, UBX_NAV_RELPOSNED);
     return packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXNAVRELPOSNED->automaticFlags.flags.bits.automatic &&
@@ -8126,8 +8230,8 @@ bool SFE_UBLOX_GNSS::getRELPOSNED(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting RELPOSNED so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting RELPOSNED so we
+    // have to poll explicitly
     packetCfg.cls = UBX_CLASS_NAV;
     packetCfg.id = UBX_NAV_RELPOSNED;
     packetCfg.len = 0;
@@ -8147,28 +8251,28 @@ bool SFE_UBLOX_GNSS::getRELPOSNED(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic RELPOSNED message generation by the GNSS. This
-// changes the way getRELPOSNED works.
+// Enable or disable automatic RELPOSNED message generation by
+// the GNSS. This changes the way getRELPOSNED works.
 bool SFE_UBLOX_GNSS::setAutoRELPOSNED(bool enable, uint16_t maxWait) {
   return setAutoRELPOSNEDrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic RELPOSNED message generation by the GNSS. This
-// changes the way getRELPOSNED works.
+// Enable or disable automatic RELPOSNED message generation by
+// the GNSS. This changes the way getRELPOSNED works.
 bool SFE_UBLOX_GNSS::setAutoRELPOSNED(bool enable, bool implicitUpdate,
                                       uint16_t maxWait) {
   return setAutoRELPOSNEDrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic HNR attitude message generation by the GNSS. This
-// changes the way getRELPOSNED works.
+// Enable or disable automatic HNR attitude message generation
+// by the GNSS. This changes the way getRELPOSNED works.
 bool SFE_UBLOX_GNSS::setAutoRELPOSNEDrate(uint8_t rate, bool implicitUpdate,
                                           uint16_t maxWait) {
-  if(!packetUBXNAVRELPOSNED)
-    initPacketUBXNAVRELPOSNED(); // Check that RAM has been allocated for the
-                                 // data
-  if (packetUBXNAVRELPOSNED ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXNAVRELPOSNED)
+    initPacketUBXNAVRELPOSNED(); // Check that RAM has been
+                                 // allocated for the data
+  if (!packetUBXNAVRELPOSNED)    // Only attempt this if RAM
+                                 // allocation was successful
     return false;
 
   if (rate > 127)
@@ -8183,7 +8287,8 @@ bool SFE_UBLOX_GNSS::setAutoRELPOSNEDrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXNAVRELPOSNED->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXNAVRELPOSNED->automaticFlags.flags.bits.implicitUpdate =
@@ -8197,24 +8302,25 @@ bool SFE_UBLOX_GNSS::setAutoRELPOSNEDrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoRELPOSNEDcallback(
     void (*callbackPointer)(UBX_NAV_RELPOSNED_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoRELPOSNED(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXNAVRELPOSNED->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXNAVRELPOSNED->callbackData =
-        new UBX_NAV_RELPOSNED_data_t; // Allocate RAM for the main struct
+        new UBX_NAV_RELPOSNED_data_t; // Allocate RAM for the
+                                      // main struct
   }
 
-  if(!packetUBXNAVRELPOSNED->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXNAVRELPOSNED->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoRELPOSNEDcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -8222,13 +8328,16 @@ bool SFE_UBLOX_GNSS::setAutoRELPOSNEDcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and HNR attitude is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and HNR
+// attitude is send cyclically already set config to suitable
+// parameters
 bool SFE_UBLOX_GNSS::assumeAutoRELPOSNED(bool enabled, bool implicitUpdate) {
-  if(!packetUBXNAVRELPOSNED)
-    initPacketUBXNAVRELPOSNED(); // Check that RAM has been allocated for the
-                                 // RELPOSNED data
-  if(!packetUBXNAVRELPOSNED) // Bail if the RAM allocation failed
+  if (!packetUBXNAVRELPOSNED)
+    initPacketUBXNAVRELPOSNED(); // Check that RAM has been
+                                 // allocated for the RELPOSNED
+                                 // data
+  if (!packetUBXNAVRELPOSNED)    // Bail if the RAM allocation
+                                 // failed
     return false;
 
   bool changes =
@@ -8243,15 +8352,15 @@ bool SFE_UBLOX_GNSS::assumeAutoRELPOSNED(bool enabled, bool implicitUpdate) {
   return changes;
 }
 
-// PRIVATE: Allocate RAM for packetUBXNAVRELPOSNED and initialize it
+// PRIVATE: Allocate RAM for packetUBXNAVRELPOSNED and
+// initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXNAVRELPOSNED() {
-  packetUBXNAVRELPOSNED =
-      new UBX_NAV_RELPOSNED_t; // Allocate RAM for the main struct
-  if(!packetUBXNAVRELPOSNED) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  packetUBXNAVRELPOSNED = new UBX_NAV_RELPOSNED_t; // Allocate RAM for
+                                                   // the main struct
+  if (!packetUBXNAVRELPOSNED) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXNAVRELPOSNED: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXNAVRELPOSNED->automaticFlags.flags.all = 0;
@@ -8263,18 +8372,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXNAVRELPOSNED() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushNAVRELPOSNED() {
-  if(!packetUBXNAVRELPOSNED)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVRELPOSNED)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logNAVRELPOSNED(bool enabled) {
-  if(!packetUBXNAVRELPOSNED)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXNAVRELPOSNED)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXNAVRELPOSNED->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -8282,16 +8391,16 @@ void SFE_UBLOX_GNSS::logNAVRELPOSNED(bool enabled) {
 // ***** RXM SFRBX automatic support
 
 bool SFE_UBLOX_GNSS::getRXMSFRBX(uint16_t maxWait) {
-  if(!packetUBXRXMSFRBX)
-    initPacketUBXRXMSFRBX(); // Check that RAM has been allocated for the TM2
-                             // data
-  if(!packetUBXRXMSFRBX) // Bail if the RAM allocation failed
+  if (!packetUBXRXMSFRBX)
+    initPacketUBXRXMSFRBX(); // Check that RAM has been
+                             // allocated for the TM2 data
+  if (!packetUBXRXMSFRBX)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXRXMSFRBX->automaticFlags.flags.bits.automatic &&
       packetUBXRXMSFRBX->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_TIM, UBX_TIM_TM2);
     return packetUBXRXMSFRBX->moduleQueried;
   } else if (packetUBXRXMSFRBX->automaticFlags.flags.bits.automatic &&
@@ -8299,8 +8408,8 @@ bool SFE_UBLOX_GNSS::getRXMSFRBX(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_RXM;
     packetCfg.id = UBX_RXM_SFRBX;
     packetCfg.len = 0;
@@ -8320,27 +8429,26 @@ bool SFE_UBLOX_GNSS::getRXMSFRBX(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getRXMSFRBX works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getRXMSFRBX works.
 bool SFE_UBLOX_GNSS::setAutoRXMSFRBX(bool enable, uint16_t maxWait) {
   return setAutoRXMSFRBXrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getRXMSFRBX works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getRXMSFRBX works.
 bool SFE_UBLOX_GNSS::setAutoRXMSFRBX(bool enable, bool implicitUpdate,
                                      uint16_t maxWait) {
   return setAutoRXMSFRBXrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getRXMSFRBX works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getRXMSFRBX works.
 bool SFE_UBLOX_GNSS::setAutoRXMSFRBXrate(uint8_t rate, bool implicitUpdate,
                                          uint16_t maxWait) {
-  if(!packetUBXRXMSFRBX)
+  if (!packetUBXRXMSFRBX)
     initPacketUBXRXMSFRBX(); // Check that RAM has been allocated for the data
-  if (packetUBXRXMSFRBX ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXRXMSFRBX) // Only attempt this if RAM allocation was successful
     return false;
 
   if (rate > 127)
@@ -8368,24 +8476,24 @@ bool SFE_UBLOX_GNSS::setAutoRXMSFRBXrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoRXMSFRBXcallback(
     void (*callbackPointer)(UBX_RXM_SFRBX_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoRXMSFRBX(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
-  if (packetUBXRXMSFRBX->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+  if (!packetUBXRXMSFRBX->callbackData) // Check if RAM has been allocated for
+                                        // the callback copy
   {
     packetUBXRXMSFRBX->callbackData =
-        new UBX_RXM_SFRBX_data_t; // Allocate RAM for the main struct
+        new UBX_RXM_SFRBX_data_t; // Allocate RAM for the main
+                                  // struct
   }
 
-  if(!packetUBXRXMSFRBX->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXRXMSFRBX->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoRXMSFRBXcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -8393,13 +8501,14 @@ bool SFE_UBLOX_GNSS::setAutoRXMSFRBXcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and SFRBX is send cyclically
-// already set config to suitable parameters
+// In case no config access to the GNSS is possible and SFRBX is
+// send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoRXMSFRBX(bool enabled, bool implicitUpdate) {
-  if(!packetUBXRXMSFRBX)
-    initPacketUBXRXMSFRBX(); // Check that RAM has been allocated for the data
-  if (packetUBXRXMSFRBX ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXRXMSFRBX)
+    initPacketUBXRXMSFRBX(); // Check that RAM has been
+                             // allocated for the data
+  if (!packetUBXRXMSFRBX)    // Only attempt this if RAM
+                             // allocation was successful
     return false;
 
   bool changes =
@@ -8417,11 +8526,10 @@ bool SFE_UBLOX_GNSS::assumeAutoRXMSFRBX(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXRXMSFRBX and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXRXMSFRBX() {
   packetUBXRXMSFRBX = new UBX_RXM_SFRBX_t; // Allocate RAM for the main struct
-  if(!packetUBXRXMSFRBX) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXRXMSFRBX) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXRXMSFRBX: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXRXMSFRBX->automaticFlags.flags.all = 0;
@@ -8433,18 +8541,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXRXMSFRBX() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushRXMSFRBX() {
-  if(!packetUBXRXMSFRBX)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXRXMSFRBX)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXRXMSFRBX->moduleQueried =
       false; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logRXMSFRBX(bool enabled) {
-  if(!packetUBXRXMSFRBX)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXRXMSFRBX)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXRXMSFRBX->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -8452,16 +8560,16 @@ void SFE_UBLOX_GNSS::logRXMSFRBX(bool enabled) {
 // ***** RXM RAWX automatic support
 
 bool SFE_UBLOX_GNSS::getRXMRAWX(uint16_t maxWait) {
-  if(!packetUBXRXMRAWX)
-    initPacketUBXRXMRAWX(); // Check that RAM has been allocated for the TM2
-                            // data
-  if(!packetUBXRXMRAWX) // Bail if the RAM allocation failed
+  if (!packetUBXRXMRAWX)
+    initPacketUBXRXMRAWX(); // Check that RAM has been allocated
+                            // for the TM2 data
+  if (!packetUBXRXMRAWX)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXRXMRAWX->automaticFlags.flags.bits.automatic &&
       packetUBXRXMRAWX->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_TIM, UBX_TIM_TM2);
     return packetUBXRXMRAWX->moduleQueried;
   } else if (packetUBXRXMRAWX->automaticFlags.flags.bits.automatic &&
@@ -8469,8 +8577,8 @@ bool SFE_UBLOX_GNSS::getRXMRAWX(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_RXM;
     packetCfg.id = UBX_RXM_RAWX;
     packetCfg.len = 0;
@@ -8490,27 +8598,28 @@ bool SFE_UBLOX_GNSS::getRXMRAWX(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getRXMRAWX works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getRXMRAWX works.
 bool SFE_UBLOX_GNSS::setAutoRXMRAWX(bool enable, uint16_t maxWait) {
   return setAutoRXMRAWXrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getRXMRAWX works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getRXMRAWX works.
 bool SFE_UBLOX_GNSS::setAutoRXMRAWX(bool enable, bool implicitUpdate,
                                     uint16_t maxWait) {
   return setAutoRXMRAWXrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getRXMRAWX works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getRXMRAWX works.
 bool SFE_UBLOX_GNSS::setAutoRXMRAWXrate(uint8_t rate, bool implicitUpdate,
                                         uint16_t maxWait) {
-  if(!packetUBXRXMRAWX)
-    initPacketUBXRXMRAWX(); // Check that RAM has been allocated for the data
-  if (packetUBXRXMRAWX ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXRXMRAWX)
+    initPacketUBXRXMRAWX(); // Check that RAM has been allocated
+                            // for the data
+  if (!packetUBXRXMRAWX)    // Only attempt this if RAM
+                            // allocation was successful
     return false;
 
   if (rate > 127)
@@ -8525,7 +8634,8 @@ bool SFE_UBLOX_GNSS::setAutoRXMRAWXrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXRXMRAWX->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXRXMRAWX->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -8537,24 +8647,25 @@ bool SFE_UBLOX_GNSS::setAutoRXMRAWXrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoRXMRAWXcallback(
     void (*callbackPointer)(UBX_RXM_RAWX_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoRXMRAWX(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXRXMRAWX->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXRXMRAWX->callbackData =
-        new UBX_RXM_RAWX_data_t; // Allocate RAM for the main struct
+        new UBX_RXM_RAWX_data_t; // Allocate RAM for the main
+                                 // struct
   }
 
-  if(!packetUBXRXMRAWX->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXRXMRAWX->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoRXMRAWXcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -8562,13 +8673,14 @@ bool SFE_UBLOX_GNSS::setAutoRXMRAWXcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and VELNED is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and VELNED
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoRXMRAWX(bool enabled, bool implicitUpdate) {
-  if(!packetUBXRXMRAWX)
-    initPacketUBXRXMRAWX(); // Check that RAM has been allocated for the data
-  if (packetUBXRXMRAWX ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXRXMRAWX)
+    initPacketUBXRXMRAWX(); // Check that RAM has been allocated
+                            // for the data
+  if (!packetUBXRXMRAWX)    // Only attempt this if RAM
+                            // allocation was successful
     return false;
 
   bool changes =
@@ -8585,11 +8697,10 @@ bool SFE_UBLOX_GNSS::assumeAutoRXMRAWX(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXRXMRAWX and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXRXMRAWX() {
   packetUBXRXMRAWX = new UBX_RXM_RAWX_t; // Allocate RAM for the main struct
-  if(!packetUBXRXMRAWX) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXRXMRAWX) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXRXMRAWX: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXRXMRAWX->automaticFlags.flags.all = 0;
@@ -8601,18 +8712,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXRXMRAWX() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushRXMRAWX() {
-  if(!packetUBXRXMRAWX)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXRXMRAWX)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXRXMRAWX->moduleQueried =
       false; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logRXMRAWX(bool enabled) {
-  if(!packetUBXRXMRAWX)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXRXMRAWX)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXRXMRAWX->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -8621,14 +8732,15 @@ void SFE_UBLOX_GNSS::logRXMRAWX(bool enabled) {
 
 // Get the latest CFG RATE - as used by isConnected
 bool SFE_UBLOX_GNSS::getNavigationFrequencyInternal(uint16_t maxWait) {
-  if(!packetUBXCFGRATE)
-    initPacketUBXCFGRATE(); // Check that RAM has been allocated for the data
-  if(!packetUBXCFGRATE) // Bail if the RAM allocation failed
+  if (!packetUBXCFGRATE)
+    initPacketUBXCFGRATE(); // Check that RAM has been allocated
+                            // for the data
+  if (!packetUBXCFGRATE)    // Bail if the RAM allocation failed
     return false;
 
-  // The CFG RATE message will never be produced automatically - that would be
-  // pointless. There is no setAutoCFGRATE function. We always need to poll
-  // explicitly.
+  // The CFG RATE message will never be produced automatically -
+  // that would be pointless. There is no setAutoCFGRATE
+  // function. We always need to poll explicitly.
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_RATE;
   packetCfg.len = 0;
@@ -8650,11 +8762,10 @@ bool SFE_UBLOX_GNSS::getNavigationFrequencyInternal(uint16_t maxWait) {
 // PRIVATE: Allocate RAM for packetUBXCFGRATE and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXCFGRATE() {
   packetUBXCFGRATE = new UBX_CFG_RATE_t; // Allocate RAM for the main struct
-  if(!packetUBXCFGRATE) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXCFGRATE) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXCFGRATE: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXCFGRATE->automaticFlags.flags.all = 0; // Redundant
@@ -8668,15 +8779,16 @@ bool SFE_UBLOX_GNSS::initPacketUBXCFGRATE() {
 // ***** TIM TM2 automatic support
 
 bool SFE_UBLOX_GNSS::getTIMTM2(uint16_t maxWait) {
-  if(!packetUBXTIMTM2)
-    initPacketUBXTIMTM2(); // Check that RAM has been allocated for the TM2 data
-  if(!packetUBXTIMTM2) // Bail if the RAM allocation failed
+  if (!packetUBXTIMTM2)
+    initPacketUBXTIMTM2(); // Check that RAM has been allocated
+                           // for the TM2 data
+  if (!packetUBXTIMTM2)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXTIMTM2->automaticFlags.flags.bits.automatic &&
       packetUBXTIMTM2->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_TIM, UBX_TIM_TM2);
     return packetUBXTIMTM2->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXTIMTM2->automaticFlags.flags.bits.automatic &&
@@ -8684,8 +8796,8 @@ bool SFE_UBLOX_GNSS::getTIMTM2(uint16_t maxWait) {
     // Someone else has to call checkUblox for us...
     return false;
   } else {
-    // The GPS is not automatically reporting navigation position so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting navigation
+    // position so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_TIM;
     packetCfg.id = UBX_TIM_TM2;
     packetCfg.len = 0;
@@ -8705,27 +8817,28 @@ bool SFE_UBLOX_GNSS::getTIMTM2(uint16_t maxWait) {
   }
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getTIMTM2 works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getTIMTM2 works.
 bool SFE_UBLOX_GNSS::setAutoTIMTM2(bool enable, uint16_t maxWait) {
   return setAutoTIMTM2rate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getTIMTM2 works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getTIMTM2 works.
 bool SFE_UBLOX_GNSS::setAutoTIMTM2(bool enable, bool implicitUpdate,
                                    uint16_t maxWait) {
   return setAutoTIMTM2rate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic navigation message generation by the GNSS. This
-// changes the way getTIMTM2 works.
+// Enable or disable automatic navigation message generation by
+// the GNSS. This changes the way getTIMTM2 works.
 bool SFE_UBLOX_GNSS::setAutoTIMTM2rate(uint8_t rate, bool implicitUpdate,
                                        uint16_t maxWait) {
-  if(!packetUBXTIMTM2)
-    initPacketUBXTIMTM2(); // Check that RAM has been allocated for the data
-  if (packetUBXTIMTM2 ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXTIMTM2)
+    initPacketUBXTIMTM2(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXTIMTM2)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   if (rate > 127)
@@ -8740,7 +8853,8 @@ bool SFE_UBLOX_GNSS::setAutoTIMTM2rate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXTIMTM2->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXTIMTM2->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -8752,24 +8866,24 @@ bool SFE_UBLOX_GNSS::setAutoTIMTM2rate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoTIMTM2callback(
     void (*callbackPointer)(UBX_TIM_TM2_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoTIMTM2(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXTIMTM2->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXTIMTM2->callbackData =
-        new UBX_TIM_TM2_data_t; // Allocate RAM for the main struct
+    packetUBXTIMTM2->callbackData = new UBX_TIM_TM2_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXTIMTM2->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXTIMTM2->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoTIMTM2callback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -8777,13 +8891,14 @@ bool SFE_UBLOX_GNSS::setAutoTIMTM2callback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and VELNED is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and VELNED
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoTIMTM2(bool enabled, bool implicitUpdate) {
-  if(!packetUBXTIMTM2)
-    initPacketUBXTIMTM2(); // Check that RAM has been allocated for the data
-  if (packetUBXTIMTM2 ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXTIMTM2)
+    initPacketUBXTIMTM2(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXTIMTM2)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   bool changes =
@@ -8800,11 +8915,10 @@ bool SFE_UBLOX_GNSS::assumeAutoTIMTM2(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXTIMTM2 and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXTIMTM2() {
   packetUBXTIMTM2 = new UBX_TIM_TM2_t; // Allocate RAM for the main struct
-  if(!packetUBXTIMTM2) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXTIMTM2) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXTIMTM2: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXTIMTM2->automaticFlags.flags.all = 0;
@@ -8816,18 +8930,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXTIMTM2() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushTIMTM2() {
-  if(!packetUBXTIMTM2)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXTIMTM2)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXTIMTM2->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logTIMTM2(bool enabled) {
-  if(!packetUBXTIMTM2)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXTIMTM2)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXTIMTM2->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
@@ -8838,39 +8952,28 @@ bool SFE_UBLOX_GNSS::getEsfAlignment(uint16_t maxWait) {
 }
 
 bool SFE_UBLOX_GNSS::getESFALG(uint16_t maxWait) {
-  if(!packetUBXESFALG)
-    initPacketUBXESFALG(); // Check that RAM has been allocated for the ESF
-                           // alignment data
-  if (packetUBXESFALG ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFALG)
+    initPacketUBXESFALG();        // Check that RAM has been allocated
+                                  // for the ESF alignment data
+  if (packetUBXESFALG == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   if (packetUBXESFALG->automaticFlags.flags.bits.automatic &&
       packetUBXESFALG->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfAlignment: Autoreporting"));
-    //  }
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
+
     checkUbloxInternal(&packetCfg, UBX_CLASS_ESF, UBX_ESF_ALG);
     return packetUBXESFALG->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXESFALG->automaticFlags.flags.bits.automatic &&
              !packetUBXESFALG->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfAlignment: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getEsfAlignment: Polling"));
-    // }
 
-    // The GPS is not automatically reporting HNR PVT so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting HNR PVT so we have
+    // to poll explicitly
     packetCfg.cls = UBX_CLASS_ESF;
     packetCfg.id = UBX_ESF_ALG;
     packetCfg.len = 0;
@@ -8883,46 +8986,38 @@ bool SFE_UBLOX_GNSS::getESFALG(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getEsfAlignment: data in packetCfg was
-      //   OVERWRITTEN by another message (but that's OK)"));
-      // }
+
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getEsfAlignment retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 
   return false; // Trap. We should never get here...
 }
 
-// Enable or disable automatic ESF ALG message generation by the GNSS. This
-// changes the way getEsfAlignment works.
+// Enable or disable automatic ESF ALG message generation by the
+// GNSS. This changes the way getEsfAlignment works.
 bool SFE_UBLOX_GNSS::setAutoESFALG(bool enable, uint16_t maxWait) {
   return setAutoESFALGrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic ESF ALG message generation by the GNSS. This
-// changes the way getEsfAlignment works.
+// Enable or disable automatic ESF ALG message generation by the
+// GNSS. This changes the way getEsfAlignment works.
 bool SFE_UBLOX_GNSS::setAutoESFALG(bool enable, bool implicitUpdate,
                                    uint16_t maxWait) {
   return setAutoESFALGrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic ESF ALG message generation by the GNSS. This
-// changes the way getEsfAlignment works.
+// Enable or disable automatic ESF ALG message generation by the
+// GNSS. This changes the way getEsfAlignment works.
 bool SFE_UBLOX_GNSS::setAutoESFALGrate(uint8_t rate, bool implicitUpdate,
                                        uint16_t maxWait) {
-  if(!packetUBXESFALG)
-    initPacketUBXESFALG(); // Check that RAM has been allocated for the data
-  if (packetUBXESFALG ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFALG)
+    initPacketUBXESFALG();        // Check that RAM has been allocated
+                                  // for the data
+  if (packetUBXESFALG == nullptr) // Only attempt this if RAM
+                                  // allocation was successful
     return false;
 
   if (rate > 127)
@@ -8937,7 +9032,8 @@ bool SFE_UBLOX_GNSS::setAutoESFALGrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXESFALG->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXESFALG->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -8950,24 +9046,23 @@ bool SFE_UBLOX_GNSS::setAutoESFALGrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoESFALGcallback(
     void (*callbackPointer)(UBX_ESF_ALG_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoESFALG(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
-  if (packetUBXESFALG->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+  if (!packetUBXESFALG->callbackData) // Check if RAM has been allocated for the
+                                      // callback copy
   {
-    packetUBXESFALG->callbackData =
-        new UBX_ESF_ALG_data_t; // Allocate RAM for the main struct
+    packetUBXESFALG->callbackData = new UBX_ESF_ALG_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXESFALG->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFALG->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoESFALGcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -8975,14 +9070,14 @@ bool SFE_UBLOX_GNSS::setAutoESFALGcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and ESF ALG is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and ESF ALG
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoESFALG(bool enabled, bool implicitUpdate) {
-  if(!packetUBXESFALG)
-    initPacketUBXESFALG(); // Check that RAM has been allocated for the ESF
-                           // alignment data
-  if (packetUBXESFALG ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFALG)
+    initPacketUBXESFALG(); // Check that RAM has been allocated
+                           // for the ESF alignment data
+  if (!packetUBXESFALG)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   bool changes =
@@ -8999,11 +9094,10 @@ bool SFE_UBLOX_GNSS::assumeAutoESFALG(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXESFALG and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXESFALG() {
   packetUBXESFALG = new UBX_ESF_ALG_t; // Allocate RAM for the main struct
-  if(!packetUBXESFALG) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFALG) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXESFALG: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXESFALG->automaticFlags.flags.all = 0;
@@ -9015,18 +9109,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXESFALG() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushESFALG() {
-  if(!packetUBXESFALG)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFALG)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFALG->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logESFALG(bool enabled) {
-  if(!packetUBXESFALG)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFALG)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFALG->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
@@ -9037,39 +9131,29 @@ bool SFE_UBLOX_GNSS::getEsfInfo(uint16_t maxWait) {
 }
 
 bool SFE_UBLOX_GNSS::getESFSTATUS(uint16_t maxWait) {
-  if(!packetUBXESFSTATUS)
-    initPacketUBXESFSTATUS(); // Check that RAM has been allocated for the ESF
-                              // status data
-  if (packetUBXESFSTATUS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFSTATUS)
+    initPacketUBXESFSTATUS(); // Check that RAM has been
+                              // allocated for the ESF status
+                              // data
+  if (!packetUBXESFSTATUS)    // Only attempt this if RAM
+                              // allocation was successful
     return false;
 
   if (packetUBXESFSTATUS->automaticFlags.flags.bits.automatic &&
       packetUBXESFSTATUS->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfInfo: Autoreporting"));
-    //  }
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
+
     checkUbloxInternal(&packetCfg, UBX_CLASS_ESF, UBX_ESF_STATUS);
     return packetUBXESFSTATUS->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXESFSTATUS->automaticFlags.flags.bits.automatic &&
              !packetUBXESFSTATUS->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfInfo: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getEsfInfo: Polling"));
-    // }
 
-    // The GPS is not automatically reporting HNR PVT so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting HNR PVT so we have
+    // to poll explicitly
     packetCfg.cls = UBX_CLASS_ESF;
     packetCfg.id = UBX_ESF_STATUS;
     packetCfg.len = 0;
@@ -9082,46 +9166,37 @@ bool SFE_UBLOX_GNSS::getESFSTATUS(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getEsfInfo: data in packetCfg was
-      //   OVERWRITTEN by another message (but that's OK)"));
-      // }
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getEsfInfo retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 
   return false; // Trap. We should never get here...
 }
 
-// Enable or disable automatic ESF STATUS message generation by the GNSS. This
-// changes the way getESFInfo works.
+// Enable or disable automatic ESF STATUS message generation by
+// the GNSS. This changes the way getESFInfo works.
 bool SFE_UBLOX_GNSS::setAutoESFSTATUS(bool enable, uint16_t maxWait) {
   return setAutoESFSTATUSrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic ESF STATUS message generation by the GNSS. This
-// changes the way getESFInfo works.
+// Enable or disable automatic ESF STATUS message generation by
+// the GNSS. This changes the way getESFInfo works.
 bool SFE_UBLOX_GNSS::setAutoESFSTATUS(bool enable, bool implicitUpdate,
                                       uint16_t maxWait) {
   return setAutoESFSTATUSrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic ESF STATUS message generation by the GNSS. This
-// changes the way getESFInfo works.
+// Enable or disable automatic ESF STATUS message generation by
+// the GNSS. This changes the way getESFInfo works.
 bool SFE_UBLOX_GNSS::setAutoESFSTATUSrate(uint8_t rate, bool implicitUpdate,
                                           uint16_t maxWait) {
-  if(!packetUBXESFSTATUS)
-    initPacketUBXESFSTATUS(); // Check that RAM has been allocated for the data
-  if (packetUBXESFSTATUS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFSTATUS)
+    initPacketUBXESFSTATUS();        // Check that RAM has been
+                                     // allocated for the data
+  if (packetUBXESFSTATUS == nullptr) // Only attempt this if RAM
+                                     // allocation was successful
     return false;
 
   if (rate > 127)
@@ -9136,7 +9211,8 @@ bool SFE_UBLOX_GNSS::setAutoESFSTATUSrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXESFSTATUS->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXESFSTATUS->automaticFlags.flags.bits.implicitUpdate =
@@ -9150,24 +9226,25 @@ bool SFE_UBLOX_GNSS::setAutoESFSTATUSrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoESFSTATUScallback(
     void (*callbackPointer)(UBX_ESF_STATUS_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoESFSTATUS(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXESFSTATUS->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXESFSTATUS->callbackData =
-        new UBX_ESF_STATUS_data_t; // Allocate RAM for the main struct
+        new UBX_ESF_STATUS_data_t; // Allocate RAM for the main
+                                   // struct
   }
 
-  if(!packetUBXESFSTATUS->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFSTATUS->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoESFSTATUScallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -9175,14 +9252,16 @@ bool SFE_UBLOX_GNSS::setAutoESFSTATUScallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and ESF STATUS is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and ESF
+// STATUS is send cyclically already set config to suitable
+// parameters
 bool SFE_UBLOX_GNSS::assumeAutoESFSTATUS(bool enabled, bool implicitUpdate) {
-  if(!packetUBXESFSTATUS)
-    initPacketUBXESFSTATUS(); // Check that RAM has been allocated for the ESF
-                              // status data
-  if (packetUBXESFSTATUS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFSTATUS)
+    initPacketUBXESFSTATUS(); // Check that RAM has been
+                              // allocated for the ESF status
+                              // data
+  if (!packetUBXESFSTATUS)    // Only attempt this if RAM
+                              // allocation was successful
     return false;
 
   bool changes =
@@ -9197,15 +9276,15 @@ bool SFE_UBLOX_GNSS::assumeAutoESFSTATUS(bool enabled, bool implicitUpdate) {
   return changes;
 }
 
-// PRIVATE: Allocate RAM for packetUBXESFSTATUS and initialize it
+// PRIVATE: Allocate RAM for packetUBXESFSTATUS and initialize
+// it
 bool SFE_UBLOX_GNSS::initPacketUBXESFSTATUS() {
   packetUBXESFSTATUS = new UBX_ESF_STATUS_t; // Allocate RAM for the main struct
 
-  if(!packetUBXESFSTATUS) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFSTATUS) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXESFSTATUS: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXESFSTATUS->automaticFlags.flags.all = 0;
@@ -9217,18 +9296,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXESFSTATUS() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushESFSTATUS() {
-  if(!packetUBXESFSTATUS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFSTATUS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFSTATUS->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logESFSTATUS(bool enabled) {
-  if(!packetUBXESFSTATUS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFSTATUS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFSTATUS->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -9240,39 +9319,27 @@ bool SFE_UBLOX_GNSS::getEsfIns(uint16_t maxWait) {
 }
 
 bool SFE_UBLOX_GNSS::getESFINS(uint16_t maxWait) {
-  if(!packetUBXESFINS)
-    initPacketUBXESFINS(); // Check that RAM has been allocated for the ESF INS
-                           // data
-  if (packetUBXESFINS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFINS)
+    initPacketUBXESFINS(); // Check that RAM has been allocated
+                           // for the ESF INS data
+  if (!packetUBXESFINS)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   if (packetUBXESFINS->automaticFlags.flags.bits.automatic &&
       packetUBXESFINS->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfIns: Autoreporting"));
-    //  }
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_ESF, UBX_ESF_INS);
     return packetUBXESFINS->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXESFINS->automaticFlags.flags.bits.automatic &&
              !packetUBXESFINS->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfIns: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getEsfIns: Polling"));
-    // }
 
-    // The GPS is not automatically reporting HNR PVT so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting HNR PVT so we have
+    // to poll explicitly
     packetCfg.cls = UBX_CLASS_ESF;
     packetCfg.id = UBX_ESF_INS;
     packetCfg.len = 0;
@@ -9285,46 +9352,38 @@ bool SFE_UBLOX_GNSS::getESFINS(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getEsfIns: data in packetCfg was OVERWRITTEN
-      //   by another message (but that's OK)"));
-      // }
+
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getEsfIns retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 
   return false; // Trap. We should never get here...
 }
 
-// Enable or disable automatic ESF INS message generation by the GNSS. This
-// changes the way getESFIns works.
+// Enable or disable automatic ESF INS message generation by the
+// GNSS. This changes the way getESFIns works.
 bool SFE_UBLOX_GNSS::setAutoESFINS(bool enable, uint16_t maxWait) {
   return setAutoESFINSrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic ESF INS message generation by the GNSS. This
-// changes the way getESFIns works.
+// Enable or disable automatic ESF INS message generation by the
+// GNSS. This changes the way getESFIns works.
 bool SFE_UBLOX_GNSS::setAutoESFINS(bool enable, bool implicitUpdate,
                                    uint16_t maxWait) {
   return setAutoESFINSrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic ESF INS message generation by the GNSS. This
-// changes the way getESFIns works.
+// Enable or disable automatic ESF INS message generation by the
+// GNSS. This changes the way getESFIns works.
 bool SFE_UBLOX_GNSS::setAutoESFINSrate(uint8_t rate, bool implicitUpdate,
                                        uint16_t maxWait) {
-  if(!packetUBXESFINS)
-    initPacketUBXESFINS(); // Check that RAM has been allocated for the data
-  if (packetUBXESFINS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFINS)
+    initPacketUBXESFINS(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXESFINS)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   if (rate > 127)
@@ -9339,7 +9398,8 @@ bool SFE_UBLOX_GNSS::setAutoESFINSrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXESFINS->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXESFINS->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -9352,24 +9412,24 @@ bool SFE_UBLOX_GNSS::setAutoESFINSrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoESFINScallback(
     void (*callbackPointer)(UBX_ESF_INS_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoESFINS(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXESFINS->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXESFINS->callbackData =
-        new UBX_ESF_INS_data_t; // Allocate RAM for the main struct
+    packetUBXESFINS->callbackData = new UBX_ESF_INS_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXESFINS->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFINS->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoESFINScallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -9377,14 +9437,14 @@ bool SFE_UBLOX_GNSS::setAutoESFINScallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and ESF INS is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and ESF INS
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoESFINS(bool enabled, bool implicitUpdate) {
-  if(!packetUBXESFINS)
-    initPacketUBXESFINS(); // Check that RAM has been allocated for the ESF INS
-                           // data
-  if (packetUBXESFINS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFINS)
+    initPacketUBXESFINS(); // Check that RAM has been allocated
+                           // for the ESF INS data
+  if (!packetUBXESFINS)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   bool changes =
@@ -9401,11 +9461,10 @@ bool SFE_UBLOX_GNSS::assumeAutoESFINS(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXESFINS and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXESFINS() {
   packetUBXESFINS = new UBX_ESF_INS_t; // Allocate RAM for the main struct
-  if(!packetUBXESFINS) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFINS) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXESFINS: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXESFINS->automaticFlags.flags.all = 0;
@@ -9417,18 +9476,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXESFINS() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushESFINS() {
-  if(!packetUBXESFINS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFINS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFINS->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logESFINS(bool enabled) {
-  if(!packetUBXESFINS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFINS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFINS->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
@@ -9439,39 +9498,27 @@ bool SFE_UBLOX_GNSS::getEsfDataInfo(uint16_t maxWait) {
 }
 
 bool SFE_UBLOX_GNSS::getESFMEAS(uint16_t maxWait) {
-  if(!packetUBXESFMEAS)
-    initPacketUBXESFMEAS(); // Check that RAM has been allocated for the ESF
-                            // MEAS data
-  if (packetUBXESFMEAS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFMEAS)
+    initPacketUBXESFMEAS(); // Check that RAM has been allocated
+                            // for the ESF MEAS data
+  if (!packetUBXESFMEAS)    // Only attempt this if RAM
+                            // allocation was successful
     return false;
 
   if (packetUBXESFMEAS->automaticFlags.flags.bits.automatic &&
       packetUBXESFMEAS->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfDataInfo: Autoreporting"));
-    //  }
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_ESF, UBX_ESF_MEAS);
     return packetUBXESFMEAS->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXESFMEAS->automaticFlags.flags.bits.automatic &&
              !packetUBXESFMEAS->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfDataInfo: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getEsfDataInfo: Polling"));
-    // }
 
-    // The GPS is not automatically reporting HNR PVT so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting HNR PVT so we have
+    // to poll explicitly
     packetCfg.cls = UBX_CLASS_ESF;
     packetCfg.id = UBX_ESF_MEAS;
     packetCfg.len = 0;
@@ -9484,46 +9531,36 @@ bool SFE_UBLOX_GNSS::getESFMEAS(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getEsfDataInfo: data in packetCfg was
-      //   OVERWRITTEN by another message (but that's OK)"));
-      // }
       return true;
     }
-
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getEsfDataInfo retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 
   return false; // Trap. We should never get here...
 }
 
-// Enable or disable automatic ESF MEAS message generation by the GNSS. This
-// changes the way getESFDataInfo works.
+// Enable or disable automatic ESF MEAS message generation by
+// the GNSS. This changes the way getESFDataInfo works.
 bool SFE_UBLOX_GNSS::setAutoESFMEAS(bool enable, uint16_t maxWait) {
   return setAutoESFMEASrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic ESF MEAS message generation by the GNSS. This
-// changes the way getESFDataInfo works.
+// Enable or disable automatic ESF MEAS message generation by
+// the GNSS. This changes the way getESFDataInfo works.
 bool SFE_UBLOX_GNSS::setAutoESFMEAS(bool enable, bool implicitUpdate,
                                     uint16_t maxWait) {
   return setAutoESFMEASrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic ESF MEAS message generation by the GNSS. This
-// changes the way getESFDataInfo works.
+// Enable or disable automatic ESF MEAS message generation by
+// the GNSS. This changes the way getESFDataInfo works.
 bool SFE_UBLOX_GNSS::setAutoESFMEASrate(uint8_t rate, bool implicitUpdate,
                                         uint16_t maxWait) {
-  if(!packetUBXESFMEAS)
-    initPacketUBXESFMEAS(); // Check that RAM has been allocated for the data
-  if (packetUBXESFMEAS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFMEAS)
+    initPacketUBXESFMEAS();        // Check that RAM has been allocated
+                                   // for the data
+  if (packetUBXESFMEAS == nullptr) // Only attempt this if RAM
+                                   // allocation was successful
     return false;
 
   if (rate > 127)
@@ -9538,7 +9575,8 @@ bool SFE_UBLOX_GNSS::setAutoESFMEASrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXESFMEAS->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXESFMEAS->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -9551,24 +9589,25 @@ bool SFE_UBLOX_GNSS::setAutoESFMEASrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoESFMEAScallback(
     void (*callbackPointer)(UBX_ESF_MEAS_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoESFMEAS(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXESFMEAS->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
     packetUBXESFMEAS->callbackData =
-        new UBX_ESF_MEAS_data_t; // Allocate RAM for the main struct
+        new UBX_ESF_MEAS_data_t; // Allocate RAM for the main
+                                 // struct
   }
 
-  if(!packetUBXESFMEAS->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFMEAS->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoESFMEAScallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -9576,14 +9615,14 @@ bool SFE_UBLOX_GNSS::setAutoESFMEAScallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and ESF MEAS is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and ESF MEAS
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoESFMEAS(bool enabled, bool implicitUpdate) {
-  if(!packetUBXESFMEAS)
-    initPacketUBXESFMEAS(); // Check that RAM has been allocated for the ESF
-                            // MEAS data
-  if (packetUBXESFMEAS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFMEAS)
+    initPacketUBXESFMEAS(); // Check that RAM has been allocated
+                            // for the ESF MEAS data
+  if (!packetUBXESFMEAS)    // Only attempt this if RAM
+                            // allocation was successful
     return false;
 
   bool changes =
@@ -9600,11 +9639,10 @@ bool SFE_UBLOX_GNSS::assumeAutoESFMEAS(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXESFMEAS and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXESFMEAS() {
   packetUBXESFMEAS = new UBX_ESF_MEAS_t; // Allocate RAM for the main struct
-  if(!packetUBXESFMEAS) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFMEAS) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXESFMEAS: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXESFMEAS->automaticFlags.flags.all = 0;
@@ -9616,18 +9654,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXESFMEAS() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushESFMEAS() {
-  if(!packetUBXESFMEAS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFMEAS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFMEAS->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logESFMEAS(bool enabled) {
-  if(!packetUBXESFMEAS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFMEAS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFMEAS->automaticFlags.flags.bits.addToFileBuffer =
       (uint8_t)enabled;
 }
@@ -9639,39 +9677,28 @@ bool SFE_UBLOX_GNSS::getEsfRawDataInfo(uint16_t maxWait) {
 }
 
 bool SFE_UBLOX_GNSS::getESFRAW(uint16_t maxWait) {
-  if(!packetUBXESFRAW)
-    initPacketUBXESFRAW(); // Check that RAM has been allocated for the ESF RAW
-                           // data
-  if (packetUBXESFRAW ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFRAW)
+    initPacketUBXESFRAW(); // Check that RAM has been allocated
+                           // for the ESF RAW data
+  if (!packetUBXESFRAW)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   if (packetUBXESFRAW->automaticFlags.flags.bits.automatic &&
       packetUBXESFRAW->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfRawDataInfo: Autoreporting"));
-    //  }
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
+
     checkUbloxInternal(&packetCfg, UBX_CLASS_ESF, UBX_ESF_RAW);
     return packetUBXESFRAW->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXESFRAW->automaticFlags.flags.bits.automatic &&
              !packetUBXESFRAW->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getEsfRawDataInfo: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getEsfRawDataInfo: Polling"));
-    // }
 
-    // The GPS is not automatically reporting HNR PVT so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting HNR PVT so we have
+    // to poll explicitly
     packetCfg.cls = UBX_CLASS_ESF;
     packetCfg.id = UBX_ESF_RAW;
     packetCfg.len = 0;
@@ -9684,46 +9711,37 @@ bool SFE_UBLOX_GNSS::getESFRAW(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getEsfRawDataInfo: data in packetCfg was
-      //   OVERWRITTEN by another message (but that's OK)"));
-      // }
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getEsfRawDataInfo retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 
   return false; // Trap. We should never get here...
 }
 
-// Enable or disable automatic ESF RAW message generation by the GNSS. This
-// changes the way getESFRawDataInfo works.
+// Enable or disable automatic ESF RAW message generation by the
+// GNSS. This changes the way getESFRawDataInfo works.
 bool SFE_UBLOX_GNSS::setAutoESFRAW(bool enable, uint16_t maxWait) {
   return setAutoESFRAWrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic ESF RAW message generation by the GNSS. This
-// changes the way getESFRawDataInfo works.
+// Enable or disable automatic ESF RAW message generation by the
+// GNSS. This changes the way getESFRawDataInfo works.
 bool SFE_UBLOX_GNSS::setAutoESFRAW(bool enable, bool implicitUpdate,
                                    uint16_t maxWait) {
   return setAutoESFRAWrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic ESF RAW message generation by the GNSS. This
-// changes the way getESFRawDataInfo works.
+// Enable or disable automatic ESF RAW message generation by the
+// GNSS. This changes the way getESFRawDataInfo works.
 bool SFE_UBLOX_GNSS::setAutoESFRAWrate(uint8_t rate, bool implicitUpdate,
                                        uint16_t maxWait) {
-  if(!packetUBXESFRAW)
-    initPacketUBXESFRAW(); // Check that RAM has been allocated for the data
-  if (packetUBXESFRAW ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFRAW)
+    initPacketUBXESFRAW(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXESFRAW)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   if (rate > 127)
@@ -9738,7 +9756,8 @@ bool SFE_UBLOX_GNSS::setAutoESFRAWrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXESFRAW->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXESFRAW->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -9751,24 +9770,24 @@ bool SFE_UBLOX_GNSS::setAutoESFRAWrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoESFRAWcallback(
     void (*callbackPointer)(UBX_ESF_RAW_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoESFRAW(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXESFRAW->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXESFRAW->callbackData =
-        new UBX_ESF_RAW_data_t; // Allocate RAM for the main struct
+    packetUBXESFRAW->callbackData = new UBX_ESF_RAW_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXESFRAW->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFRAW->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoESFRAWcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -9776,14 +9795,14 @@ bool SFE_UBLOX_GNSS::setAutoESFRAWcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and ESF RAW is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and ESF RAW
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoESFRAW(bool enabled, bool implicitUpdate) {
-  if(!packetUBXESFRAW)
-    initPacketUBXESFRAW(); // Check that RAM has been allocated for the ESF RAW
-                           // data
-  if (packetUBXESFRAW ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXESFRAW)
+    initPacketUBXESFRAW(); // Check that RAM has been allocated
+                           // for the ESF RAW data
+  if (!packetUBXESFRAW)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   bool changes =
@@ -9800,11 +9819,10 @@ bool SFE_UBLOX_GNSS::assumeAutoESFRAW(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXESFRAW and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXESFRAW() {
   packetUBXESFRAW = new UBX_ESF_RAW_t; // Allocate RAM for the main struct
-  if(!packetUBXESFRAW) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXESFRAW) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXESFRAW: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXESFRAW->automaticFlags.flags.all = 0;
@@ -9816,18 +9834,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXESFRAW() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushESFRAW() {
-  if(!packetUBXESFRAW)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFRAW)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFRAW->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logESFRAW(bool enabled) {
-  if(!packetUBXESFRAW)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXESFRAW)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXESFRAW->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
@@ -9838,44 +9856,32 @@ bool SFE_UBLOX_GNSS::getHNRAtt(uint16_t maxWait) {
 }
 
 // Get the HNR Attitude data
-//  Returns true if the get HNR attitude is successful. Data is returned in
-//  hnrAtt Note: if hnrAttQueried is true, it gets set to false by this function
-//  since we assume
-//        that the user will read hnrAtt immediately after this. I.e. this
-//        function will only return true _once_ after each auto HNR Att is
-//        processed
+//  Returns true if the get HNR attitude is successful. Data is
+//  returned in hnrAtt Note: if hnrAttQueried is true, it gets
+//  set to false by this function since we assume
+//        that the user will read hnrAtt immediately after this.
+//        I.e. this function will only return true _once_ after
+//        each auto HNR Att is processed
 bool SFE_UBLOX_GNSS::getHNRATT(uint16_t maxWait) {
-  if(!packetUBXHNRATT)
-    initPacketUBXHNRATT(); // Check that RAM has been allocated for the data
-  if(!packetUBXHNRATT) // Bail if the RAM allocation failed
+  if (!packetUBXHNRATT)
+    initPacketUBXHNRATT(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXHNRATT)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXHNRATT->automaticFlags.flags.bits.automatic &&
       packetUBXHNRATT->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getHNRAtt: Autoreporting"));
-    //  }
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_HNR, UBX_HNR_ATT);
     return packetUBXHNRATT->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXHNRATT->automaticFlags.flags.bits.automatic &&
              !packetUBXHNRATT->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getHNRAtt: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getHNRAtt: Polling"));
-    // }
-
-    // The GPS is not automatically reporting HNR attitude so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting HNR attitude so we
+    // have to poll explicitly
     packetCfg.cls = UBX_CLASS_HNR;
     packetCfg.id = UBX_HNR_ATT;
     packetCfg.len = 0;
@@ -9888,46 +9894,37 @@ bool SFE_UBLOX_GNSS::getHNRATT(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getHNRAtt: data in packetCfg was OVERWRITTEN
-      //   by another message (but that's OK)"));
-      // }
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getHNRAtt retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 
   return false; // Trap. We should never get here...
 }
 
-// Enable or disable automatic HNR attitude message generation by the GNSS. This
-// changes the way getHNRAtt works.
+// Enable or disable automatic HNR attitude message generation
+// by the GNSS. This changes the way getHNRAtt works.
 bool SFE_UBLOX_GNSS::setAutoHNRATT(bool enable, uint16_t maxWait) {
   return setAutoHNRATTrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic HNR attitude message generation by the GNSS. This
-// changes the way getHNRAtt works.
+// Enable or disable automatic HNR attitude message generation
+// by the GNSS. This changes the way getHNRAtt works.
 bool SFE_UBLOX_GNSS::setAutoHNRATT(bool enable, bool implicitUpdate,
                                    uint16_t maxWait) {
   return setAutoHNRATTrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic HNR attitude message generation by the GNSS. This
-// changes the way getHNRAtt works.
+// Enable or disable automatic HNR attitude message generation
+// by the GNSS. This changes the way getHNRAtt works.
 bool SFE_UBLOX_GNSS::setAutoHNRATTrate(uint8_t rate, bool implicitUpdate,
                                        uint16_t maxWait) {
-  if(!packetUBXHNRATT)
-    initPacketUBXHNRATT(); // Check that RAM has been allocated for the data
-  if (packetUBXHNRATT ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXHNRATT)
+    initPacketUBXHNRATT(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXHNRATT)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   if (rate > 127)
@@ -9942,7 +9939,8 @@ bool SFE_UBLOX_GNSS::setAutoHNRATTrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXHNRATT->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXHNRATT->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -9955,24 +9953,24 @@ bool SFE_UBLOX_GNSS::setAutoHNRATTrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoHNRATTcallback(
     void (*callbackPointer)(UBX_HNR_ATT_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoHNRATT(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXHNRATT->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXHNRATT->callbackData =
-        new UBX_HNR_ATT_data_t; // Allocate RAM for the main struct
+    packetUBXHNRATT->callbackData = new UBX_HNR_ATT_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXHNRATT->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXHNRATT->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoHNRAttcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -9980,12 +9978,14 @@ bool SFE_UBLOX_GNSS::setAutoHNRATTcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and HNR attitude is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and HNR
+// attitude is send cyclically already set config to suitable
+// parameters
 bool SFE_UBLOX_GNSS::assumeAutoHNRATT(bool enabled, bool implicitUpdate) {
-  if(!packetUBXHNRATT)
-    initPacketUBXHNRATT(); // Check that RAM has been allocated for the data
-  if(!packetUBXHNRATT) // Bail if the RAM allocation failed
+  if (!packetUBXHNRATT)
+    initPacketUBXHNRATT(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXHNRATT)    // Bail if the RAM allocation failed
     return false;
 
   bool changes =
@@ -10002,11 +10002,10 @@ bool SFE_UBLOX_GNSS::assumeAutoHNRATT(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXHNRATT and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXHNRATT() {
   packetUBXHNRATT = new UBX_HNR_ATT_t; // Allocate RAM for the main struct
-  if(!packetUBXHNRATT) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXHNRATT) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXHNRATT: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXHNRATT->automaticFlags.flags.all = 0;
@@ -10018,18 +10017,18 @@ bool SFE_UBLOX_GNSS::initPacketUBXHNRATT() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushHNRATT() {
-  if(!packetUBXHNRATT)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXHNRATT)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXHNRATT->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logHNRATT(bool enabled) {
-  if(!packetUBXHNRATT)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXHNRATT)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXHNRATT->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
@@ -10040,44 +10039,33 @@ bool SFE_UBLOX_GNSS::getHNRDyn(uint16_t maxWait) {
 }
 
 // Get the HNR vehicle dynamics data
-//  Returns true if the get HNR vehicle dynamics is successful. Data is returned
-//  in hnrVehDyn Note: if hnrDynQueried is true, it gets set to false by this
-//  function since we assume
-//        that the user will read hnrVehDyn immediately after this. I.e. this
-//        function will only return true _once_ after each auto HNR Dyn is
-//        processed
+//  Returns true if the get HNR vehicle dynamics is successful.
+//  Data is returned in hnrVehDyn Note: if hnrDynQueried is
+//  true, it gets set to false by this function since we assume
+//        that the user will read hnrVehDyn immediately after
+//        this. I.e. this function will only return true _once_
+//        after each auto HNR Dyn is processed
 bool SFE_UBLOX_GNSS::getHNRINS(uint16_t maxWait) {
-  if(!packetUBXHNRINS)
-    initPacketUBXHNRINS(); // Check that RAM has been allocated for the data
-  if(!packetUBXHNRINS) // Bail if the RAM allocation failed
+  if (!packetUBXHNRINS)
+    initPacketUBXHNRINS(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXHNRINS)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXHNRINS->automaticFlags.flags.bits.automatic &&
       packetUBXHNRINS->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getHNRDyn: Autoreporting"));
-    //  }
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_HNR, UBX_HNR_INS);
     return packetUBXHNRINS->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXHNRINS->automaticFlags.flags.bits.automatic &&
              !packetUBXHNRINS->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getHNRDyn: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getHNRDyn: Polling"));
-    // }
 
-    // The GPS is not automatically reporting HNR vehicle dynamics so we have to
-    // poll explicitly
+    // The GPS is not automatically reporting HNR vehicle
+    // dynamics so we have to poll explicitly
     packetCfg.cls = UBX_CLASS_HNR;
     packetCfg.id = UBX_HNR_INS;
     packetCfg.len = 0;
@@ -10090,46 +10078,37 @@ bool SFE_UBLOX_GNSS::getHNRINS(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getHNRDyn: data in packetCfg was OVERWRITTEN
-      //   by another message (but that's OK)"));
-      // }
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getHNRDyn retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 
   return false; // Trap. We should never get here...
 }
 
-// Enable or disable automatic HNR vehicle dynamics message generation by the
-// GNSS. This changes the way getHNRDyn works.
+// Enable or disable automatic HNR vehicle dynamics message
+// generation by the GNSS. This changes the way getHNRDyn works.
 bool SFE_UBLOX_GNSS::setAutoHNRINS(bool enable, uint16_t maxWait) {
   return setAutoHNRINSrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic HNR vehicle dynamics message generation by the
-// GNSS. This changes the way getHNRDyn works.
+// Enable or disable automatic HNR vehicle dynamics message
+// generation by the GNSS. This changes the way getHNRDyn works.
 bool SFE_UBLOX_GNSS::setAutoHNRINS(bool enable, bool implicitUpdate,
                                    uint16_t maxWait) {
   return setAutoHNRINSrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic HNR vehicle dynamics message generation by the
-// GNSS. This changes the way getHNRDyn works.
+// Enable or disable automatic HNR vehicle dynamics message
+// generation by the GNSS. This changes the way getHNRDyn works.
 bool SFE_UBLOX_GNSS::setAutoHNRINSrate(uint8_t rate, bool implicitUpdate,
                                        uint16_t maxWait) {
-  if(!packetUBXHNRINS)
-    initPacketUBXHNRINS(); // Check that RAM has been allocated for the data
-  if (packetUBXHNRINS ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXHNRINS)
+    initPacketUBXHNRINS(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXHNRINS)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   if (rate > 127)
@@ -10144,7 +10123,8 @@ bool SFE_UBLOX_GNSS::setAutoHNRINSrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXHNRINS->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXHNRINS->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -10157,24 +10137,24 @@ bool SFE_UBLOX_GNSS::setAutoHNRINSrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoHNRINScallback(
     void (*callbackPointer)(UBX_HNR_INS_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoHNRINS(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXHNRINS->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXHNRINS->callbackData =
-        new UBX_HNR_INS_data_t; // Allocate RAM for the main struct
+    packetUBXHNRINS->callbackData = new UBX_HNR_INS_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXHNRINS->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXHNRINS->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoHNRDyncallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -10182,12 +10162,14 @@ bool SFE_UBLOX_GNSS::setAutoHNRINScallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and HNR vehicle dynamics is
-// send cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and HNR
+// vehicle dynamics is send cyclically already set config to
+// suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoHNRINS(bool enabled, bool implicitUpdate) {
-  if(!packetUBXHNRINS)
-    initPacketUBXHNRINS(); // Check that RAM has been allocated for the data
-  if(!packetUBXHNRINS) // Bail if the RAM allocation failed
+  if (!packetUBXHNRINS)
+    initPacketUBXHNRINS(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXHNRINS)    // Bail if the RAM allocation failed
     return false;
 
   bool changes =
@@ -10204,11 +10186,10 @@ bool SFE_UBLOX_GNSS::assumeAutoHNRINS(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXHNRINS and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXHNRINS() {
   packetUBXHNRINS = new UBX_HNR_INS_t; // Allocate RAM for the main struct
-  if(!packetUBXHNRINS) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXHNRINS) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXHNRINS: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXHNRINS->automaticFlags.flags.all = 0;
@@ -10220,63 +10201,52 @@ bool SFE_UBLOX_GNSS::initPacketUBXHNRINS() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushHNRINS() {
-  if(!packetUBXHNRINS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXHNRINS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXHNRINS->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logHNRINS(bool enabled) {
-  if(!packetUBXHNRINS)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXHNRINS)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXHNRINS->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
 // ***** HNR PVT automatic support
 
 // Get the HNR PVT data
-//  Returns true if the get HNR PVT is successful. Data is returned in hnrPVT
-//  Note: if hnrPVTQueried is true, it gets set to false by this function since
-//  we assume
-//        that the user will read hnrPVT immediately after this. I.e. this
-//        function will only return true _once_ after each auto HNR PVT is
-//        processed
+//  Returns true if the get HNR PVT is successful. Data is
+//  returned in hnrPVT Note: if hnrPVTQueried is true, it gets
+//  set to false by this function since we assume
+//        that the user will read hnrPVT immediately after this.
+//        I.e. this function will only return true _once_ after
+//        each auto HNR PVT is processed
 bool SFE_UBLOX_GNSS::getHNRPVT(uint16_t maxWait) {
-  if(!packetUBXHNRPVT)
-    initPacketUBXHNRPVT(); // Check that RAM has been allocated for the PVT data
-  if (packetUBXHNRPVT ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXHNRPVT)
+    initPacketUBXHNRPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXHNRPVT)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   if (packetUBXHNRPVT->automaticFlags.flags.bits.automatic &&
       packetUBXHNRPVT->automaticFlags.flags.bits.implicitUpdate) {
-    // The GPS is automatically reporting, we just check whether we got unread
-    // data
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getHNRPVT: Autoreporting"));
-    //  }
+    // The GPS is automatically reporting, we just check whether
+    // we got unread data
     checkUbloxInternal(&packetCfg, UBX_CLASS_HNR, UBX_HNR_PVT);
     return packetUBXHNRPVT->moduleQueried.moduleQueried.bits.all;
   } else if (packetUBXHNRPVT->automaticFlags.flags.bits.automatic &&
              !packetUBXHNRPVT->automaticFlags.flags.bits.implicitUpdate) {
     // Someone else has to call checkUblox for us...
-    //  if (_printDebug == true)
-    //  {
-    //    _debugSerial->println(F("getHNRPVT: Exit immediately"));
-    //  }
     return false;
   } else {
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->println(F("getHNRPVT: Polling"));
-    // }
 
-    // The GPS is not automatically reporting HNR PVT so we have to poll
-    // explicitly
+    // The GPS is not automatically reporting HNR PVT so we have
+    // to poll explicitly
     packetCfg.cls = UBX_CLASS_HNR;
     packetCfg.id = UBX_HNR_PVT;
     packetCfg.len = 0;
@@ -10289,46 +10259,37 @@ bool SFE_UBLOX_GNSS::getHNRPVT(uint16_t maxWait) {
       return true;
 
     if (retVal == SFE_UBLOX_STATUS_DATA_OVERWRITTEN) {
-      // if (_printDebug == true)
-      // {
-      //   _debugSerial->println(F("getHNRPVT: data in packetCfg was OVERWRITTEN
-      //   by another message (but that's OK)"));
-      // }
       return true;
     }
 
-    // if (_printDebug == true)
-    // {
-    //   _debugSerial->print(F("getHNRPVT retVal: "));
-    //   _debugSerial->println(statusString(retVal));
-    // }
     return false;
   }
 
   return false; // Trap. We should never get here...
 }
 
-// Enable or disable automatic HNR PVT message generation by the GNSS. This
-// changes the way getHNRPVT works.
+// Enable or disable automatic HNR PVT message generation by the
+// GNSS. This changes the way getHNRPVT works.
 bool SFE_UBLOX_GNSS::setAutoHNRPVT(bool enable, uint16_t maxWait) {
   return setAutoHNRPVTrate(enable ? 1 : 0, true, maxWait);
 }
 
-// Enable or disable automatic HNR PVT message generation by the GNSS. This
-// changes the way getHNRPVT works.
+// Enable or disable automatic HNR PVT message generation by the
+// GNSS. This changes the way getHNRPVT works.
 bool SFE_UBLOX_GNSS::setAutoHNRPVT(bool enable, bool implicitUpdate,
                                    uint16_t maxWait) {
   return setAutoHNRPVTrate(enable ? 1 : 0, implicitUpdate, maxWait);
 }
 
-// Enable or disable automatic HNR PVT message generation by the GNSS. This
-// changes the way getHNRPVT works.
+// Enable or disable automatic HNR PVT message generation by the
+// GNSS. This changes the way getHNRPVT works.
 bool SFE_UBLOX_GNSS::setAutoHNRPVTrate(uint8_t rate, bool implicitUpdate,
                                        uint16_t maxWait) {
-  if(!packetUBXHNRPVT)
-    initPacketUBXHNRPVT(); // Check that RAM has been allocated for the data
-  if (packetUBXHNRPVT ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXHNRPVT)
+    initPacketUBXHNRPVT(); // Check that RAM has been allocated
+                           // for the data
+  if (!packetUBXHNRPVT)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   if (rate > 127)
@@ -10343,7 +10304,8 @@ bool SFE_UBLOX_GNSS::setAutoHNRPVTrate(uint8_t rate, bool implicitUpdate,
   payloadCfg[2] = rate; // rate relative to navigation freq.
 
   bool ok = ((sendCommand(&packetCfg, maxWait)) ==
-             SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+             SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                          // expecting an ACK
   if (ok) {
     packetUBXHNRPVT->automaticFlags.flags.bits.automatic = (rate > 0);
     packetUBXHNRPVT->automaticFlags.flags.bits.implicitUpdate = implicitUpdate;
@@ -10356,24 +10318,24 @@ bool SFE_UBLOX_GNSS::setAutoHNRPVTrate(uint8_t rate, bool implicitUpdate,
 // Enable automatic navigation message generation by the GNSS.
 bool SFE_UBLOX_GNSS::setAutoHNRPVTcallback(
     void (*callbackPointer)(UBX_HNR_PVT_data_t), uint16_t maxWait) {
-  // Enable auto messages. Set implicitUpdate to false as we expect the user to
-  // call checkUblox manually.
+  // Enable auto messages. Set implicitUpdate to false as we
+  // expect the user to call checkUblox manually.
   bool result = setAutoHNRPVT(true, false, maxWait);
   if (!result)
     return (result); // Bail if setAuto failed
 
   if (packetUBXHNRPVT->callbackData ==
-      nullptr) // Check if RAM has been allocated for the callback copy
+      nullptr) // Check if RAM has been allocated for the
+               // callback copy
   {
-    packetUBXHNRPVT->callbackData =
-        new UBX_HNR_PVT_data_t; // Allocate RAM for the main struct
+    packetUBXHNRPVT->callbackData = new UBX_HNR_PVT_data_t; // Allocate RAM for
+                                                            // the main struct
   }
 
-  if(!packetUBXHNRPVT->callbackData) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXHNRPVT->callbackData) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("setAutoHNRPVTcallback: RAM alloc failed!"));
+    }
     return false;
   }
 
@@ -10381,13 +10343,14 @@ bool SFE_UBLOX_GNSS::setAutoHNRPVTcallback(
   return true;
 }
 
-// In case no config access to the GNSS is possible and HNR PVT is send
-// cyclically already set config to suitable parameters
+// In case no config access to the GNSS is possible and HNR PVT
+// is send cyclically already set config to suitable parameters
 bool SFE_UBLOX_GNSS::assumeAutoHNRPVT(bool enabled, bool implicitUpdate) {
-  if(!packetUBXHNRPVT)
-    initPacketUBXHNRPVT(); // Check that RAM has been allocated for the PVT data
-  if (packetUBXHNRPVT ==
-      nullptr) // Only attempt this if RAM allocation was successful
+  if (!packetUBXHNRPVT)
+    initPacketUBXHNRPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXHNRPVT)    // Only attempt this if RAM
+                           // allocation was successful
     return false;
 
   bool changes =
@@ -10404,11 +10367,10 @@ bool SFE_UBLOX_GNSS::assumeAutoHNRPVT(bool enabled, bool implicitUpdate) {
 // PRIVATE: Allocate RAM for packetUBXHNRPVT and initialize it
 bool SFE_UBLOX_GNSS::initPacketUBXHNRPVT() {
   packetUBXHNRPVT = new UBX_HNR_PVT_t; // Allocate RAM for the main struct
-  if(!packetUBXHNRPVT) {
-    if ((_printDebug == true) ||
-        (_printLimitedDebug ==
-         true)) // This is important. Print this if doing limited debugging
+  if (!packetUBXHNRPVT) {
+    if (isDebugLimited()) {
       _debugSerial->println(F("initPacketUBXHNRPVT: RAM alloc failed!"));
+    }
     return false;
   }
   packetUBXHNRPVT->automaticFlags.flags.all = 0;
@@ -10420,25 +10382,26 @@ bool SFE_UBLOX_GNSS::initPacketUBXHNRPVT() {
 
 // Mark all the data as read/stale
 void SFE_UBLOX_GNSS::flushHNRPVT() {
-  if(!packetUBXHNRPVT)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXHNRPVT)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXHNRPVT->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
 
 // Log this data in file buffer
 void SFE_UBLOX_GNSS::logHNRPVT(bool enabled) {
-  if(!packetUBXHNRPVT)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXHNRPVT)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXHNRPVT->automaticFlags.flags.bits.addToFileBuffer = (uint8_t)enabled;
 }
 
 // ***** Helper Functions for NMEA Logging / Processing
 
-// Log selected NMEA messages to file buffer - if the messages are enabled and
-// if the file buffer exists User needs to call setFileBufferSize before .begin
+// Log selected NMEA messages to file buffer - if the messages
+// are enabled and if the file buffer exists User needs to call
+// setFileBufferSize before .begin
 void SFE_UBLOX_GNSS::setNMEALoggingMask(uint32_t messages) {
   _logNMEA.all = messages;
 }
@@ -10452,23 +10415,23 @@ uint32_t SFE_UBLOX_GNSS::getProcessNMEAMask() { return (_processNMEA.all); }
 
 // ***** CFG RATE Helper Functions
 
-// Set the rate at which the module will give us an updated navigation solution
-// Expects a number that is the updates per second. For example 1 = 1Hz, 2 =
-// 2Hz, etc. Max is 40Hz(?!)
+// Set the rate at which the module will give us an updated
+// navigation solution Expects a number that is the updates per
+// second. For example 1 = 1Hz, 2 = 2Hz, etc. Max is 40Hz(?!)
 bool SFE_UBLOX_GNSS::setNavigationFrequency(uint8_t navFreq, uint16_t maxWait) {
   if (navFreq > 40)
-    navFreq = 40; // Limit navFreq to 40Hz so i2cPollingWait is set correctly
+    navFreq = 40; // Limit navFreq to 40Hz so i2cPollingWait is
+                  // set correctly
 
   // Adjust the I2C polling timeout based on update rate
   // Do this even if the sendCommand fails
   i2cPollingWaitNAV =
-      1000 /
-      (((int)navFreq) *
-       4); // This is the number of ms to wait between checks for new I2C data
-  i2cPollingWait =
-      i2cPollingWaitNAV < i2cPollingWaitHNR
-          ? i2cPollingWaitNAV
-          : i2cPollingWaitHNR; // Set i2cPollingWait to the lower of NAV and HNR
+      1000 / (((int)navFreq) * 4); // This is the number of ms to wait
+                                   // between checks for new I2C data
+  i2cPollingWait = i2cPollingWaitNAV < i2cPollingWaitHNR
+                       ? i2cPollingWaitNAV
+                       : i2cPollingWaitHNR; // Set i2cPollingWait to the
+                                            // lower of NAV and HNR
 
   // Query the module
   packetCfg.cls = UBX_CLASS_CFG;
@@ -10476,64 +10439,67 @@ bool SFE_UBLOX_GNSS::setNavigationFrequency(uint8_t navFreq, uint16_t maxWait) {
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // This will load the payloadCfg array with current settings of the given
-  // register
+  // This will load the payloadCfg array with current settings
+  // of the given register
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
-    return false;                   // If command send fails then bail
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
+    return false;                     // If command send fails then bail
 
   uint16_t measurementRate = 1000 / navFreq;
 
-  // payloadCfg is now loaded with current bytes. Change only the ones we need
-  // to
+  // payloadCfg is now loaded with current bytes. Change only
+  // the ones we need to
   payloadCfg[0] = measurementRate & 0xFF; // measRate LSB
   payloadCfg[1] = measurementRate >> 8;   // measRate MSB
 
   bool result = ((sendCommand(&packetCfg, maxWait)) ==
-                 SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+                 SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                              // expecting an ACK
 
-  flushCFGRATE(); // Mark the polled measurement and navigation rate data as
-                  // stale
+  flushCFGRATE(); // Mark the polled measurement and navigation
+                  // rate data as stale
 
   return (result);
 }
 
 // Get the rate at which the module is outputting nav solutions
 uint8_t SFE_UBLOX_GNSS::getNavigationFrequency(uint16_t maxWait) {
-  if(!packetUBXCFGRATE)
-    initPacketUBXCFGRATE(); // Check that RAM has been allocated for the RATE
-                            // data
-  if(!packetUBXCFGRATE) // Bail if the RAM allocation failed
+  if (!packetUBXCFGRATE)
+    initPacketUBXCFGRATE(); // Check that RAM has been allocated
+                            // for the RATE data
+  if (!packetUBXCFGRATE)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXCFGRATE->moduleQueried.moduleQueried.bits.measRate == false)
     getNavigationFrequencyInternal(maxWait);
   packetUBXCFGRATE->moduleQueried.moduleQueried.bits.measRate =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXCFGRATE->moduleQueried.moduleQueried.bits.all = false;
 
   uint16_t measurementRate = packetUBXCFGRATE->data.measRate;
 
-  measurementRate =
-      1000 / measurementRate; // This may return an int when it's a float, but
-                              // I'd rather not return 4 bytes
+  measurementRate = 1000 / measurementRate; // This may return an int when
+                                            // it's a float, but I'd rather
+                                            // not return 4 bytes
   return (measurementRate);
 }
 
-// Set the elapsed time between GNSS measurements in milliseconds, which defines
-// the rate
+// Set the elapsed time between GNSS measurements in
+// milliseconds, which defines the rate
 bool SFE_UBLOX_GNSS::setMeasurementRate(uint16_t rate, uint16_t maxWait) {
-  if (rate < 25) // "Measurement rate should be greater than or equal to 25 ms."
+  if (rate < 25) // "Measurement rate should be greater than or
+                 // equal to 25 ms."
     rate = 25;
 
   // Adjust the I2C polling timeout based on update rate
-  i2cPollingWaitNAV =
-      rate /
-      4; // This is the number of ms to wait between checks for new I2C data
-  i2cPollingWait =
-      i2cPollingWaitNAV < i2cPollingWaitHNR
-          ? i2cPollingWaitNAV
-          : i2cPollingWaitHNR; // Set i2cPollingWait to the lower of NAV and HNR
+  i2cPollingWaitNAV = rate / 4; // This is the number of ms to wait
+                                // between checks for new I2C data
+  i2cPollingWait = i2cPollingWaitNAV < i2cPollingWaitHNR
+                       ? i2cPollingWaitNAV
+                       : i2cPollingWaitHNR; // Set i2cPollingWait to the
+                                            // lower of NAV and HNR
 
   // Query the module
   packetCfg.cls = UBX_CLASS_CFG;
@@ -10541,46 +10507,49 @@ bool SFE_UBLOX_GNSS::setMeasurementRate(uint16_t rate, uint16_t maxWait) {
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // This will load the payloadCfg array with current settings of the given
-  // register
+  // This will load the payloadCfg array with current settings
+  // of the given register
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
-    return false;                   // If command send fails then bail
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
+    return false;                     // If command send fails then bail
 
-  // payloadCfg is now loaded with current bytes. Change only the ones we need
-  // to
+  // payloadCfg is now loaded with current bytes. Change only
+  // the ones we need to
   payloadCfg[0] = rate & 0xFF; // measRate LSB
   payloadCfg[1] = rate >> 8;   // measRate MSB
 
   bool result = ((sendCommand(&packetCfg, maxWait)) ==
-                 SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+                 SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                              // expecting an ACK
 
-  flushCFGRATE(); // Mark the polled measurement and navigation rate data as
-                  // stale
+  flushCFGRATE(); // Mark the polled measurement and navigation
+                  // rate data as stale
 
   return (result);
 }
 
-// Return the elapsed time between GNSS measurements in milliseconds, which
-// defines the rate
+// Return the elapsed time between GNSS measurements in
+// milliseconds, which defines the rate
 uint16_t SFE_UBLOX_GNSS::getMeasurementRate(uint16_t maxWait) {
-  if(!packetUBXCFGRATE)
-    initPacketUBXCFGRATE(); // Check that RAM has been allocated for the RATE
-                            // data
-  if(!packetUBXCFGRATE) // Bail if the RAM allocation failed
+  if (!packetUBXCFGRATE)
+    initPacketUBXCFGRATE(); // Check that RAM has been allocated
+                            // for the RATE data
+  if (!packetUBXCFGRATE)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXCFGRATE->moduleQueried.moduleQueried.bits.measRate == false)
     getNavigationFrequencyInternal(maxWait);
   packetUBXCFGRATE->moduleQueried.moduleQueried.bits.measRate =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXCFGRATE->moduleQueried.moduleQueried.bits.all = false;
 
   return (packetUBXCFGRATE->data.measRate);
 }
 
-// Set the ratio between the number of measurements and the number of navigation
-// solutions. Unit is cycles. Max is 127.
+// Set the ratio between the number of measurements and the
+// number of navigation solutions. Unit is cycles. Max is 127.
 bool SFE_UBLOX_GNSS::setNavigationRate(uint16_t rate, uint16_t maxWait) {
   // Query the module
   packetCfg.cls = UBX_CLASS_CFG;
@@ -10588,39 +10557,42 @@ bool SFE_UBLOX_GNSS::setNavigationRate(uint16_t rate, uint16_t maxWait) {
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // This will load the payloadCfg array with current settings of the given
-  // register
+  // This will load the payloadCfg array with current settings
+  // of the given register
   if (sendCommand(&packetCfg, maxWait) !=
-      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data and an ACK
-    return false;                   // If command send fails then bail
+      SFE_UBLOX_STATUS_DATA_RECEIVED) // We are expecting data
+                                      // and an ACK
+    return false;                     // If command send fails then bail
 
-  // payloadCfg is now loaded with current bytes. Change only the ones we need
-  // to
+  // payloadCfg is now loaded with current bytes. Change only
+  // the ones we need to
   payloadCfg[2] = rate & 0xFF; // navRate LSB
   payloadCfg[3] = rate >> 8;   // navRate MSB
 
   bool result = ((sendCommand(&packetCfg, maxWait)) ==
-                 SFE_UBLOX_STATUS_DATA_SENT); // We are only expecting an ACK
+                 SFE_UBLOX_STATUS_DATA_SENT); // We are only
+                                              // expecting an ACK
 
-  flushCFGRATE(); // Mark the polled measurement and navigation rate data as
-                  // stale
+  flushCFGRATE(); // Mark the polled measurement and navigation
+                  // rate data as stale
 
   return (result);
 }
 
-// Return the ratio between the number of measurements and the number of
-// navigation solutions. Unit is cycles
+// Return the ratio between the number of measurements and the
+// number of navigation solutions. Unit is cycles
 uint16_t SFE_UBLOX_GNSS::getNavigationRate(uint16_t maxWait) {
-  if(!packetUBXCFGRATE)
-    initPacketUBXCFGRATE(); // Check that RAM has been allocated for the RATE
-                            // data
-  if(!packetUBXCFGRATE) // Bail if the RAM allocation failed
+  if (!packetUBXCFGRATE)
+    initPacketUBXCFGRATE(); // Check that RAM has been allocated
+                            // for the RATE data
+  if (!packetUBXCFGRATE)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXCFGRATE->moduleQueried.moduleQueried.bits.navRate == false)
     getNavigationFrequencyInternal(maxWait);
   packetUBXCFGRATE->moduleQueried.moduleQueried.bits.navRate =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXCFGRATE->moduleQueried.moduleQueried.bits.all = false;
 
   return (packetUBXCFGRATE->data.navRate);
@@ -10628,9 +10600,9 @@ uint16_t SFE_UBLOX_GNSS::getNavigationRate(uint16_t maxWait) {
 
 // Mark the CFG RATE data as read/stale
 void SFE_UBLOX_GNSS::flushCFGRATE() {
-  if(!packetUBXCFGRATE)
-    return; // Bail if RAM has not been allocated (otherwise we could be writing
-            // anywhere!)
+  if (!packetUBXCFGRATE)
+    return; // Bail if RAM has not been allocated (otherwise we
+            // could be writing anywhere!)
   packetUBXCFGRATE->moduleQueried.moduleQueried.all =
       0; // Mark all datums as stale (read before)
 }
@@ -10638,99 +10610,113 @@ void SFE_UBLOX_GNSS::flushCFGRATE() {
 // ***** DOP Helper Functions
 
 uint16_t SFE_UBLOX_GNSS::getGeometricDOP(uint16_t maxWait) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the DOP data
-  if(!packetUBXNAVDOP) // Bail if the RAM allocation failed
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP(); // Check that RAM has been allocated
+                           // for the DOP data
+  if (!packetUBXNAVDOP)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVDOP->moduleQueried.moduleQueried.bits.gDOP == false)
     getDOP(maxWait);
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.gDOP =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVDOP->data.gDOP);
 }
 
 uint16_t SFE_UBLOX_GNSS::getPositionDOP(uint16_t maxWait) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the DOP data
-  if(!packetUBXNAVDOP) // Bail if the RAM allocation failed
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP(); // Check that RAM has been allocated
+                           // for the DOP data
+  if (!packetUBXNAVDOP)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVDOP->moduleQueried.moduleQueried.bits.pDOP == false)
     getDOP(maxWait);
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.pDOP =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVDOP->data.pDOP);
 }
 
 uint16_t SFE_UBLOX_GNSS::getTimeDOP(uint16_t maxWait) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the DOP data
-  if(!packetUBXNAVDOP) // Bail if the RAM allocation failed
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP(); // Check that RAM has been allocated
+                           // for the DOP data
+  if (!packetUBXNAVDOP)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVDOP->moduleQueried.moduleQueried.bits.tDOP == false)
     getDOP(maxWait);
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.tDOP =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVDOP->data.tDOP);
 }
 
 uint16_t SFE_UBLOX_GNSS::getVerticalDOP(uint16_t maxWait) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the DOP data
-  if(!packetUBXNAVDOP) // Bail if the RAM allocation failed
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP(); // Check that RAM has been allocated
+                           // for the DOP data
+  if (!packetUBXNAVDOP)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVDOP->moduleQueried.moduleQueried.bits.vDOP == false)
     getDOP(maxWait);
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.vDOP =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVDOP->data.vDOP);
 }
 
 uint16_t SFE_UBLOX_GNSS::getHorizontalDOP(uint16_t maxWait) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the DOP data
-  if(!packetUBXNAVDOP) // Bail if the RAM allocation failed
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP(); // Check that RAM has been allocated
+                           // for the DOP data
+  if (!packetUBXNAVDOP)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVDOP->moduleQueried.moduleQueried.bits.hDOP == false)
     getDOP(maxWait);
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.hDOP =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVDOP->data.hDOP);
 }
 
 uint16_t SFE_UBLOX_GNSS::getNorthingDOP(uint16_t maxWait) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the DOP data
-  if(!packetUBXNAVDOP) // Bail if the RAM allocation failed
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP(); // Check that RAM has been allocated
+                           // for the DOP data
+  if (!packetUBXNAVDOP)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVDOP->moduleQueried.moduleQueried.bits.nDOP == false)
     getDOP(maxWait);
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.nDOP =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVDOP->data.nDOP);
 }
 
 uint16_t SFE_UBLOX_GNSS::getEastingDOP(uint16_t maxWait) {
-  if(!packetUBXNAVDOP)
-    initPacketUBXNAVDOP(); // Check that RAM has been allocated for the DOP data
-  if(!packetUBXNAVDOP) // Bail if the RAM allocation failed
+  if (!packetUBXNAVDOP)
+    initPacketUBXNAVDOP(); // Check that RAM has been allocated
+                           // for the DOP data
+  if (!packetUBXNAVDOP)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVDOP->moduleQueried.moduleQueried.bits.eDOP == false)
     getDOP(maxWait);
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.eDOP =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVDOP->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVDOP->data.eDOP);
 }
@@ -10739,32 +10725,34 @@ uint16_t SFE_UBLOX_GNSS::getEastingDOP(uint16_t maxWait) {
 
 float SFE_UBLOX_GNSS::getATTroll(uint16_t maxWait) // Returned as degrees
 {
-  if(!packetUBXNAVATT)
-    initPacketUBXNAVATT(); // Check that RAM has been allocated for the NAV ATT
-                           // data
-  if(!packetUBXNAVATT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVATT)
+    initPacketUBXNAVATT(); // Check that RAM has been allocated
+                           // for the NAV ATT data
+  if (!packetUBXNAVATT)    // Bail if the RAM allocation failed
     return (0);
 
   if (packetUBXNAVATT->moduleQueried.moduleQueried.bits.roll == false)
     getNAVATT(maxWait);
   packetUBXNAVATT->moduleQueried.moduleQueried.bits.roll =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVATT->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXNAVATT->data.roll) / 100000.0); // Convert to degrees
 }
 
 float SFE_UBLOX_GNSS::getATTpitch(uint16_t maxWait) // Returned as degrees
 {
-  if(!packetUBXNAVATT)
-    initPacketUBXNAVATT(); // Check that RAM has been allocated for the NAV ATT
-                           // data
-  if(!packetUBXNAVATT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVATT)
+    initPacketUBXNAVATT(); // Check that RAM has been allocated
+                           // for the NAV ATT data
+  if (!packetUBXNAVATT)    // Bail if the RAM allocation failed
     return (0);
 
   if (packetUBXNAVATT->moduleQueried.moduleQueried.bits.pitch == false)
     getNAVATT(maxWait);
   packetUBXNAVATT->moduleQueried.moduleQueried.bits.pitch =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVATT->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXNAVATT->data.pitch) /
           100000.0); // Convert to degrees
@@ -10772,16 +10760,17 @@ float SFE_UBLOX_GNSS::getATTpitch(uint16_t maxWait) // Returned as degrees
 
 float SFE_UBLOX_GNSS::getATTheading(uint16_t maxWait) // Returned as degrees
 {
-  if(!packetUBXNAVATT)
-    initPacketUBXNAVATT(); // Check that RAM has been allocated for the NAV ATT
-                           // data
-  if(!packetUBXNAVATT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVATT)
+    initPacketUBXNAVATT(); // Check that RAM has been allocated
+                           // for the NAV ATT data
+  if (!packetUBXNAVATT)    // Bail if the RAM allocation failed
     return (0);
 
   if (packetUBXNAVATT->moduleQueried.moduleQueried.bits.heading == false)
     getNAVATT(maxWait);
   packetUBXNAVATT->moduleQueried.moduleQueried.bits.heading =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVATT->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXNAVATT->data.heading) /
           100000.0); // Convert to degrees
@@ -10790,144 +10779,164 @@ float SFE_UBLOX_GNSS::getATTheading(uint16_t maxWait) // Returned as degrees
 // ***** PVT Helper Functions
 
 uint32_t SFE_UBLOX_GNSS::getTimeOfWeek(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.iTOW == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.iTOW =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.iTOW);
 }
 
 // Get the current year
 uint16_t SFE_UBLOX_GNSS::getYear(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.year == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.year =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.year);
 }
 
 // Get the current month
 uint8_t SFE_UBLOX_GNSS::getMonth(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.month == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.month =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.month);
 }
 
 // Get the current day
 uint8_t SFE_UBLOX_GNSS::getDay(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.day == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.day =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.day);
 }
 
 // Get the current hour
 uint8_t SFE_UBLOX_GNSS::getHour(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.hour == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.hour =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.hour);
 }
 
 // Get the current minute
 uint8_t SFE_UBLOX_GNSS::getMinute(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.min == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.min =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.min);
 }
 
 // Get the current second
 uint8_t SFE_UBLOX_GNSS::getSecond(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.sec == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.sec =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.sec);
 }
 
 // Get the current millisecond
 uint16_t SFE_UBLOX_GNSS::getMillisecond(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.iTOW == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.iTOW =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.iTOW % 1000);
 }
 
 // Get the current nanoseconds - includes milliseconds
 int32_t SFE_UBLOX_GNSS::getNanosecond(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.nano == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.nano =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.nano);
 }
 
-// Get the current Unix epoch time rounded up to the nearest second
+// Get the current Unix epoch time rounded up to the nearest
+// second
 uint32_t SFE_UBLOX_GNSS::getUnixEpoch(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.sec == false)
@@ -10939,8 +10948,8 @@ uint32_t SFE_UBLOX_GNSS::getUnixEpoch(uint16_t maxWait) {
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.min = false;
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.sec = false;
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
-  // assemble time elements into time_t - credits to Thomas Roell @
-  // https://github.com/GrumpyOldPizza
+  // assemble time elements into time_t - credits to Thomas
+  // Roell @ https://github.com/GrumpyOldPizza
   uint32_t t =
       ((((((((uint32_t)packetUBXNAVPVT->data.year - 1970) * 365) +
            ((((uint32_t)packetUBXNAVPVT->data.year - 1970) + 3) / 4)) +
@@ -10958,9 +10967,10 @@ uint32_t SFE_UBLOX_GNSS::getUnixEpoch(uint16_t maxWait) {
 
 // Get the current Unix epoch including microseconds
 uint32_t SFE_UBLOX_GNSS::getUnixEpoch(uint32_t &microsecond, uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.nano == false)
@@ -10973,8 +10983,8 @@ uint32_t SFE_UBLOX_GNSS::getUnixEpoch(uint32_t &microsecond, uint16_t maxWait) {
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.sec = false;
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.nano = false;
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
-  // assemble time elements into time_t - credits to Thomas Roell @
-  // https://github.com/GrumpyOldPizza
+  // assemble time elements into time_t - credits to Thomas
+  // Roell @ https://github.com/GrumpyOldPizza
   uint32_t t =
       ((((((((uint32_t)packetUBXNAVPVT->data.year - 1970) * 365) +
            ((((uint32_t)packetUBXNAVPVT->data.year - 1970) + 3) / 4)) +
@@ -10999,75 +11009,85 @@ uint32_t SFE_UBLOX_GNSS::getUnixEpoch(uint32_t &microsecond, uint16_t maxWait) {
 
 // Get the current date validity
 bool SFE_UBLOX_GNSS::getDateValid(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.validDate == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.validDate =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return ((bool)packetUBXNAVPVT->data.valid.bits.validDate);
 }
 
 // Get the current time validity
 bool SFE_UBLOX_GNSS::getTimeValid(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.validTime == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.validTime =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return ((bool)packetUBXNAVPVT->data.valid.bits.validTime);
 }
 
 // Check to see if the UTC time has been fully resolved
 bool SFE_UBLOX_GNSS::getTimeFullyResolved(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.fullyResolved == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.fullyResolved =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return ((bool)packetUBXNAVPVT->data.valid.bits.fullyResolved);
 }
 
 // Get the confirmed date validity
 bool SFE_UBLOX_GNSS::getConfirmedDate(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.confirmedDate == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.confirmedDate =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return ((bool)packetUBXNAVPVT->data.flags2.bits.confirmedDate);
 }
 
 // Get the confirmed time validity
 bool SFE_UBLOX_GNSS::getConfirmedTime(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.confirmedTime == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.confirmedTime =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return ((bool)packetUBXNAVPVT->data.flags2.bits.confirmedTime);
 }
@@ -11075,92 +11095,105 @@ bool SFE_UBLOX_GNSS::getConfirmedTime(uint16_t maxWait) {
 // Get the current fix type
 // 0=no fix, 1=dead reckoning, 2=2D, 3=3D, 4=GNSS, 5=Time fix
 uint8_t SFE_UBLOX_GNSS::getFixType(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.fixType == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.fixType =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.fixType);
 }
 
-// Get whether we have a valid fix (i.e within DOP & accuracy masks)
+// Get whether we have a valid fix (i.e within DOP & accuracy
+// masks)
 bool SFE_UBLOX_GNSS::getGnssFixOk(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.gnssFixOK == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.gnssFixOK =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.flags.bits.gnssFixOK);
 }
 
 // Get whether differential corrections were applied
 bool SFE_UBLOX_GNSS::getDiffSoln(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.diffSoln == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.diffSoln =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.flags.bits.diffSoln);
 }
 
 // Get whether head vehicle valid or not
 bool SFE_UBLOX_GNSS::getHeadVehValid(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.headVehValid == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.headVehValid =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this
+             // to user, mark this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.flags.bits.headVehValid);
 }
 
 // Get the carrier phase range solution status
-// Useful when querying module to see if it has high-precision RTK fix
-// 0=No solution, 1=Float solution, 2=Fixed solution
+// Useful when querying module to see if it has high-precision
+// RTK fix 0=No solution, 1=Float solution, 2=Fixed solution
 uint8_t SFE_UBLOX_GNSS::getCarrierSolutionType(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.carrSoln == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.carrSoln =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.flags.bits.carrSoln);
 }
 
 // Get the number of satellites used in fix
 uint8_t SFE_UBLOX_GNSS::getSIV(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.numSV == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.numSV =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.numSV);
 }
@@ -11168,15 +11201,17 @@ uint8_t SFE_UBLOX_GNSS::getSIV(uint16_t maxWait) {
 // Get the current longitude in degrees
 // Returns a long representing the number of degrees *10^-7
 int32_t SFE_UBLOX_GNSS::getLongitude(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.lon == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.lon =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.lon);
 }
@@ -11184,274 +11219,317 @@ int32_t SFE_UBLOX_GNSS::getLongitude(uint16_t maxWait) {
 // Get the current latitude in degrees
 // Returns a long representing the number of degrees *10^-7
 int32_t SFE_UBLOX_GNSS::getLatitude(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.lat == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.lat =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.lat);
 }
 
 // Get the current altitude in mm according to ellipsoid model
 int32_t SFE_UBLOX_GNSS::getAltitude(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.height == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.height =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.height);
 }
 
 // Get the current altitude in mm according to mean sea level
-// Ellipsoid model: https://www.esri.com/news/arcuser/0703/geoid1of3.html
+// Ellipsoid model:
+// https://www.esri.com/news/arcuser/0703/geoid1of3.html
 // Difference between Ellipsoid Model and Mean Sea Level:
 // https://eos-gnss.com/elevation-for-beginners/
 int32_t SFE_UBLOX_GNSS::getAltitudeMSL(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.hMSL == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.hMSL =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.hMSL);
 }
 
 int32_t SFE_UBLOX_GNSS::getHorizontalAccEst(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.hAcc == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.hAcc =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.hAcc);
 }
 
 int32_t SFE_UBLOX_GNSS::getVerticalAccEst(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.vAcc == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.vAcc =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.vAcc);
 }
 
 int32_t SFE_UBLOX_GNSS::getNedNorthVel(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.velN == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.velN =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.velN);
 }
 
 int32_t SFE_UBLOX_GNSS::getNedEastVel(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.velE == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.velE =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.velE);
 }
 
 int32_t SFE_UBLOX_GNSS::getNedDownVel(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.velD == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.velD =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.velD);
 }
 
 // Get the ground speed in mm/s
 int32_t SFE_UBLOX_GNSS::getGroundSpeed(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.gSpeed == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.gSpeed =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.gSpeed);
 }
 
-// Get the heading of motion (as opposed to heading of car) in degrees * 10^-5
+// Get the heading of motion (as opposed to heading of car) in
+// degrees * 10^-5
 int32_t SFE_UBLOX_GNSS::getHeading(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.headMot == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.headMot =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.headMot);
 }
 
 uint32_t SFE_UBLOX_GNSS::getSpeedAccEst(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.sAcc == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.sAcc =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.sAcc);
 }
 
 uint32_t SFE_UBLOX_GNSS::getHeadingAccEst(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.headAcc == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.headAcc =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.headAcc);
 }
 
-// Get the positional dillution of precision * 10^-2 (dimensionless)
+// Get the positional dillution of precision * 10^-2
+// (dimensionless)
 uint16_t SFE_UBLOX_GNSS::getPDOP(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.pDOP == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.pDOP =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.pDOP);
 }
 
 bool SFE_UBLOX_GNSS::getInvalidLlh(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.invalidLlh == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.invalidLlh =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to
+             // user, mark this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return ((bool)packetUBXNAVPVT->data.flags3.bits.invalidLlh);
 }
 
 int32_t SFE_UBLOX_GNSS::getHeadVeh(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.headVeh == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.headVeh =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.headVeh);
 }
 
 int16_t SFE_UBLOX_GNSS::getMagDec(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.magDec == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.magDec =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.magDec);
 }
 
 uint16_t SFE_UBLOX_GNSS::getMagAcc(uint16_t maxWait) {
-  if(!packetUBXNAVPVT)
-    initPacketUBXNAVPVT(); // Check that RAM has been allocated for the PVT data
-  if(!packetUBXNAVPVT) // Bail if the RAM allocation failed
+  if (!packetUBXNAVPVT)
+    initPacketUBXNAVPVT(); // Check that RAM has been allocated
+                           // for the PVT data
+  if (!packetUBXNAVPVT)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.magAcc == false)
     getPVT(maxWait);
   packetUBXNAVPVT->moduleQueried.moduleQueried2.bits.magAcc =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVPVT->moduleQueried.moduleQueried1.bits.all = false;
   return (packetUBXNAVPVT->data.magAcc);
 }
 
-// getGeoidSeparation is currently redundant. The geoid separation seems to only
-// be provided in NMEA GGA and GNS messages.
+// getGeoidSeparation is currently redundant. The geoid
+// separation seems to only be provided in NMEA GGA and GNS
+// messages.
 int32_t SFE_UBLOX_GNSS::getGeoidSeparation(
-    uint16_t maxWait) // IGNORE COMPILER WARNING unused parameter 'maxWait'
+    uint16_t maxWait) // IGNORE COMPILER WARNING unused
+                      // parameter 'maxWait'
 {
   return (0);
 }
 
 // ***** HPPOSECEF Helper Functions
 
-// Get the current 3D high precision positional accuracy - a fun thing to watch
-// Returns a long representing the 3D accuracy in millimeters
+// Get the current 3D high precision positional accuracy - a fun
+// thing to watch Returns a long representing the 3D accuracy in
+// millimeters
 uint32_t SFE_UBLOX_GNSS::getPositionAccuracy(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSECEF)
-    initPacketUBXNAVHPPOSECEF(); // Check that RAM has been allocated for the
-                                 // HPPOSECEF data
-  if(!packetUBXNAVHPPOSECEF) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSECEF)
+    initPacketUBXNAVHPPOSECEF(); // Check that RAM has been
+                                 // allocated for the HPPOSECEF
+                                 // data
+  if (!packetUBXNAVHPPOSECEF)    // Bail if the RAM allocation
+                                 // failed
     return 0;
 
   if (packetUBXNAVHPPOSECEF->moduleQueried.moduleQueried.bits.pAcc == false)
     getNAVHPPOSECEF(maxWait);
   packetUBXNAVHPPOSECEF->moduleQueried.moduleQueried.bits.pAcc =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVHPPOSECEF->moduleQueried.moduleQueried.bits.all = false;
 
   uint32_t tempAccuracy = packetUBXNAVHPPOSECEF->data.pAcc;
@@ -11466,166 +11544,199 @@ uint32_t SFE_UBLOX_GNSS::getPositionAccuracy(uint16_t maxWait) {
 // ***** HPPOSLLH Helper Functions
 
 uint32_t SFE_UBLOX_GNSS::getTimeOfWeekFromHPPOSLLH(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.iTOW == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.iTOW =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.iTOW);
 }
 
 int32_t SFE_UBLOX_GNSS::getHighResLongitude(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.lon == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.lon =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.lon);
 }
 
 int32_t SFE_UBLOX_GNSS::getHighResLatitude(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.lat == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.lat =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.lat);
 }
 
 int32_t SFE_UBLOX_GNSS::getElipsoid(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.height == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.height =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to
+             // user, mark this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.height);
 }
 
 int32_t SFE_UBLOX_GNSS::getMeanSeaLevel(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.hMSL == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.hMSL =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.hMSL);
 }
 
 int8_t SFE_UBLOX_GNSS::getHighResLongitudeHp(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.lonHp == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.lonHp =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.lonHp);
 }
 
 int8_t SFE_UBLOX_GNSS::getHighResLatitudeHp(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.latHp == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.latHp =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.latHp);
 }
 
 int8_t SFE_UBLOX_GNSS::getElipsoidHp(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.heightHp == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.heightHp =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to
+             // user, mark this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.heightHp);
 }
 
 int8_t SFE_UBLOX_GNSS::getMeanSeaLevelHp(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.hMSLHp == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.hMSLHp =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to
+             // user, mark this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.hMSLHp);
 }
 
 uint32_t SFE_UBLOX_GNSS::getHorizontalAccuracy(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.hAcc == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.hAcc =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.hAcc);
 }
 
 uint32_t SFE_UBLOX_GNSS::getVerticalAccuracy(uint16_t maxWait) {
-  if(!packetUBXNAVHPPOSLLH)
-    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been allocated for the
-                                // HPPOSLLH data
-  if(!packetUBXNAVHPPOSLLH) // Bail if the RAM allocation failed
+  if (!packetUBXNAVHPPOSLLH)
+    initPacketUBXNAVHPPOSLLH(); // Check that RAM has been
+                                // allocated for the HPPOSLLH
+                                // data
+  if (!packetUBXNAVHPPOSLLH)    // Bail if the RAM allocation
+                                // failed
     return 0;
 
   if (packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.vAcc == false)
     getHPPOSLLH(maxWait);
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.vAcc =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVHPPOSLLH->moduleQueried.moduleQueried.bits.all = false;
   return (packetUBXNAVHPPOSLLH->data.vAcc);
 }
@@ -11633,31 +11744,33 @@ uint32_t SFE_UBLOX_GNSS::getVerticalAccuracy(uint16_t maxWait) {
 // ***** SVIN Helper Functions
 
 bool SFE_UBLOX_GNSS::getSurveyInActive(uint16_t maxWait) {
-  if(!packetUBXNAVSVIN)
-    initPacketUBXNAVSVIN(); // Check that RAM has been allocated for the SVIN
-                            // data
-  if(!packetUBXNAVSVIN) // Bail if the RAM allocation failed
+  if (!packetUBXNAVSVIN)
+    initPacketUBXNAVSVIN(); // Check that RAM has been allocated
+                            // for the SVIN data
+  if (!packetUBXNAVSVIN)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.active == false)
     getSurveyStatus(maxWait);
   packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.active =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.all = false;
   return ((bool)packetUBXNAVSVIN->data.active);
 }
 
 bool SFE_UBLOX_GNSS::getSurveyInValid(uint16_t maxWait) {
-  if(!packetUBXNAVSVIN)
-    initPacketUBXNAVSVIN(); // Check that RAM has been allocated for the SVIN
-                            // data
-  if(!packetUBXNAVSVIN) // Bail if the RAM allocation failed
+  if (!packetUBXNAVSVIN)
+    initPacketUBXNAVSVIN(); // Check that RAM has been allocated
+                            // for the SVIN data
+  if (!packetUBXNAVSVIN)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.valid == false)
     getSurveyStatus(maxWait);
   packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.valid =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.all = false;
   return ((bool)packetUBXNAVSVIN->data.valid);
 }
@@ -11665,21 +11778,23 @@ bool SFE_UBLOX_GNSS::getSurveyInValid(uint16_t maxWait) {
 uint16_t SFE_UBLOX_GNSS::getSurveyInObservationTime(
     uint16_t maxWait) // Truncated to 65535 seconds
 {
-  if(!packetUBXNAVSVIN)
-    initPacketUBXNAVSVIN(); // Check that RAM has been allocated for the SVIN
-                            // data
-  if(!packetUBXNAVSVIN) // Bail if the RAM allocation failed
+  if (!packetUBXNAVSVIN)
+    initPacketUBXNAVSVIN(); // Check that RAM has been allocated
+                            // for the SVIN data
+  if (!packetUBXNAVSVIN)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.dur == false)
     getSurveyStatus(maxWait);
   packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.dur =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.all = false;
 
-  // dur (Passed survey-in observation time) is U4 (uint32_t) seconds. We
-  // truncate to 16 bits
-  //(waiting more than 65535 seconds (18.2 hours) seems excessive!)
+  // dur (Passed survey-in observation time) is U4 (uint32_t)
+  // seconds. We truncate to 16 bits
+  //(waiting more than 65535 seconds (18.2 hours) seems
+  // excessive!)
   uint32_t tmpObsTime = packetUBXNAVSVIN->data.dur;
   if (tmpObsTime <= 0xFFFF) {
     return ((uint16_t)tmpObsTime);
@@ -11690,19 +11805,21 @@ uint16_t SFE_UBLOX_GNSS::getSurveyInObservationTime(
 
 float SFE_UBLOX_GNSS::getSurveyInMeanAccuracy(uint16_t maxWait) // Returned as m
 {
-  if(!packetUBXNAVSVIN)
-    initPacketUBXNAVSVIN(); // Check that RAM has been allocated for the SVIN
-                            // data
-  if(!packetUBXNAVSVIN) // Bail if the RAM allocation failed
+  if (!packetUBXNAVSVIN)
+    initPacketUBXNAVSVIN(); // Check that RAM has been allocated
+                            // for the SVIN data
+  if (!packetUBXNAVSVIN)    // Bail if the RAM allocation failed
     return 0;
 
   if (packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.meanAcc == false)
     getSurveyStatus(maxWait);
   packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.meanAcc =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVSVIN->moduleQueried.moduleQueried.bits.all = false;
 
-  // meanAcc is U4 (uint32_t) in 0.1mm. We convert this to float.
+  // meanAcc is U4 (uint32_t) in 0.1mm. We convert this to
+  // float.
   uint32_t tempFloat = packetUBXNAVSVIN->data.meanAcc;
   return (((float)tempFloat) / 10000.0); // Convert 0.1mm to m
 }
@@ -11711,17 +11828,18 @@ float SFE_UBLOX_GNSS::getSurveyInMeanAccuracy(uint16_t maxWait) // Returned as m
 
 uint8_t SFE_UBLOX_GNSS::getLeapIndicator(int32_t &timeToLsEvent,
                                          uint16_t maxWait) {
-  if(!packetUBXNAVTIMELS)
-    initPacketUBXNAVTIMELS(); // Check that RAM has been allocated for the
-                              // TIMELS data
-  if(!packetUBXNAVTIMELS) // Bail if the RAM allocation failed
+  if (!packetUBXNAVTIMELS)
+    initPacketUBXNAVTIMELS(); // Check that RAM has been
+                              // allocated for the TIMELS data
+  if (!packetUBXNAVTIMELS)    // Bail if the RAM allocation failed
     return 3;
 
   if (packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.validTimeToLsEvent ==
       false)
     getLeapSecondEvent(maxWait);
   packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.validTimeToLsEvent =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to
+             // user, mark this data as stale
   packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.lsChange = false;
   packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.timeToLsEvent = false;
   packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.all = false;
@@ -11740,16 +11858,17 @@ uint8_t SFE_UBLOX_GNSS::getLeapIndicator(int32_t &timeToLsEvent,
 
 int8_t SFE_UBLOX_GNSS::getCurrentLeapSeconds(sfe_ublox_ls_src_e &source,
                                              uint16_t maxWait) {
-  if(!packetUBXNAVTIMELS)
-    initPacketUBXNAVTIMELS(); // Check that RAM has been allocated for the
-                              // TIMELS data
-  if(!packetUBXNAVTIMELS) // Bail if the RAM allocation failed
+  if (!packetUBXNAVTIMELS)
+    initPacketUBXNAVTIMELS(); // Check that RAM has been
+                              // allocated for the TIMELS data
+  if (!packetUBXNAVTIMELS)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.validCurrLs == false)
     getLeapSecondEvent(maxWait);
   packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.validCurrLs =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this
+             // to user, mark this data as stale
   packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.srcOfCurrLs = false;
   packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.currLs = false;
   packetUBXNAVTIMELS->moduleQueried.moduleQueried.bits.all = false;
@@ -11761,96 +11880,114 @@ int8_t SFE_UBLOX_GNSS::getCurrentLeapSeconds(sfe_ublox_ls_src_e &source,
 
 float SFE_UBLOX_GNSS::getRelPosN(uint16_t maxWait) // Returned as m
 {
-  if(!packetUBXNAVRELPOSNED)
-    initPacketUBXNAVRELPOSNED(); // Check that RAM has been allocated for the
-                                 // RELPOSNED data
-  if(!packetUBXNAVRELPOSNED) // Bail if the RAM allocation failed
+  if (!packetUBXNAVRELPOSNED)
+    initPacketUBXNAVRELPOSNED(); // Check that RAM has been
+                                 // allocated for the RELPOSNED
+                                 // data
+  if (!packetUBXNAVRELPOSNED)    // Bail if the RAM allocation
+                                 // failed
     return 0;
 
   if (packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.relPosN == false)
     getRELPOSNED(maxWait);
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.relPosN =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to
+             // user, mark this data as stale
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXNAVRELPOSNED->data.relPosN) / 100.0); // Convert to m
 }
 
 float SFE_UBLOX_GNSS::getRelPosE(uint16_t maxWait) // Returned as m
 {
-  if(!packetUBXNAVRELPOSNED)
-    initPacketUBXNAVRELPOSNED(); // Check that RAM has been allocated for the
-                                 // RELPOSNED data
-  if(!packetUBXNAVRELPOSNED) // Bail if the RAM allocation failed
+  if (!packetUBXNAVRELPOSNED)
+    initPacketUBXNAVRELPOSNED(); // Check that RAM has been
+                                 // allocated for the RELPOSNED
+                                 // data
+  if (!packetUBXNAVRELPOSNED)    // Bail if the RAM allocation
+                                 // failed
     return 0;
 
   if (packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.relPosE == false)
     getRELPOSNED(maxWait);
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.relPosE =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to
+             // user, mark this data as stale
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXNAVRELPOSNED->data.relPosE) / 100.0); // Convert to m
 }
 
 float SFE_UBLOX_GNSS::getRelPosD(uint16_t maxWait) // Returned as m
 {
-  if(!packetUBXNAVRELPOSNED)
-    initPacketUBXNAVRELPOSNED(); // Check that RAM has been allocated for the
-                                 // RELPOSNED data
-  if(!packetUBXNAVRELPOSNED) // Bail if the RAM allocation failed
+  if (!packetUBXNAVRELPOSNED)
+    initPacketUBXNAVRELPOSNED(); // Check that RAM has been
+                                 // allocated for the RELPOSNED
+                                 // data
+  if (!packetUBXNAVRELPOSNED)    // Bail if the RAM allocation
+                                 // failed
     return 0;
 
   if (packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.relPosD == false)
     getRELPOSNED(maxWait);
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.relPosD =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to
+             // user, mark this data as stale
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXNAVRELPOSNED->data.relPosD) / 100.0); // Convert to m
 }
 
 float SFE_UBLOX_GNSS::getRelPosAccN(uint16_t maxWait) // Returned as m
 {
-  if(!packetUBXNAVRELPOSNED)
-    initPacketUBXNAVRELPOSNED(); // Check that RAM has been allocated for the
-                                 // RELPOSNED data
-  if(!packetUBXNAVRELPOSNED) // Bail if the RAM allocation failed
+  if (!packetUBXNAVRELPOSNED)
+    initPacketUBXNAVRELPOSNED(); // Check that RAM has been
+                                 // allocated for the RELPOSNED
+                                 // data
+  if (!packetUBXNAVRELPOSNED)    // Bail if the RAM allocation
+                                 // failed
     return 0;
 
   if (packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.accN == false)
     getRELPOSNED(maxWait);
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.accN =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXNAVRELPOSNED->data.accN) / 10000.0); // Convert to m
 }
 
 float SFE_UBLOX_GNSS::getRelPosAccE(uint16_t maxWait) // Returned as m
 {
-  if(!packetUBXNAVRELPOSNED)
-    initPacketUBXNAVRELPOSNED(); // Check that RAM has been allocated for the
-                                 // RELPOSNED data
-  if(!packetUBXNAVRELPOSNED) // Bail if the RAM allocation failed
+  if (!packetUBXNAVRELPOSNED)
+    initPacketUBXNAVRELPOSNED(); // Check that RAM has been
+                                 // allocated for the RELPOSNED
+                                 // data
+  if (!packetUBXNAVRELPOSNED)    // Bail if the RAM allocation
+                                 // failed
     return 0;
 
   if (packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.accE == false)
     getRELPOSNED(maxWait);
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.accE =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXNAVRELPOSNED->data.accE) / 10000.0); // Convert to m
 }
 
 float SFE_UBLOX_GNSS::getRelPosAccD(uint16_t maxWait) // Returned as m
 {
-  if(!packetUBXNAVRELPOSNED)
-    initPacketUBXNAVRELPOSNED(); // Check that RAM has been allocated for the
-                                 // RELPOSNED data
-  if(!packetUBXNAVRELPOSNED) // Bail if the RAM allocation failed
+  if (!packetUBXNAVRELPOSNED)
+    initPacketUBXNAVRELPOSNED(); // Check that RAM has been
+                                 // allocated for the RELPOSNED
+                                 // data
+  if (!packetUBXNAVRELPOSNED)    // Bail if the RAM allocation
+                                 // failed
     return 0;
 
   if (packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.accD == false)
     getRELPOSNED(maxWait);
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.accD =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXNAVRELPOSNED->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXNAVRELPOSNED->data.accD) / 10000.0); // Convert to m
 }
@@ -11859,66 +11996,69 @@ float SFE_UBLOX_GNSS::getRelPosAccD(uint16_t maxWait) // Returned as m
 
 float SFE_UBLOX_GNSS::getESFroll(uint16_t maxWait) // Returned as degrees
 {
-  if(!packetUBXESFALG)
-    initPacketUBXESFALG(); // Check that RAM has been allocated for the ESF ALG
-                           // data
-  if(!packetUBXESFALG) // Bail if the RAM allocation failed
+  if (!packetUBXESFALG)
+    initPacketUBXESFALG(); // Check that RAM has been allocated
+                           // for the ESF ALG data
+  if (!packetUBXESFALG)    // Bail if the RAM allocation failed
     return (0);
 
   if (packetUBXESFALG->moduleQueried.moduleQueried.bits.roll == false)
     getESFALG(maxWait);
   packetUBXESFALG->moduleQueried.moduleQueried.bits.roll =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXESFALG->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXESFALG->data.roll) / 100.0); // Convert to degrees
 }
 
 float SFE_UBLOX_GNSS::getESFpitch(uint16_t maxWait) // Returned as degrees
 {
-  if(!packetUBXESFALG)
-    initPacketUBXESFALG(); // Check that RAM has been allocated for the ESF ALG
-                           // data
-  if(!packetUBXESFALG) // Bail if the RAM allocation failed
+  if (!packetUBXESFALG)
+    initPacketUBXESFALG(); // Check that RAM has been allocated
+                           // for the ESF ALG data
+  if (!packetUBXESFALG)    // Bail if the RAM allocation failed
     return (0);
 
   if (packetUBXESFALG->moduleQueried.moduleQueried.bits.pitch == false)
     getESFALG(maxWait);
   packetUBXESFALG->moduleQueried.moduleQueried.bits.pitch =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXESFALG->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXESFALG->data.pitch) / 100.0); // Convert to degrees
 }
 
 float SFE_UBLOX_GNSS::getESFyaw(uint16_t maxWait) // Returned as degrees
 {
-  if(!packetUBXESFALG)
-    initPacketUBXESFALG(); // Check that RAM has been allocated for the ESF ALG
-                           // data
-  if(!packetUBXESFALG) // Bail if the RAM allocation failed
+  if (!packetUBXESFALG)
+    initPacketUBXESFALG(); // Check that RAM has been allocated
+                           // for the ESF ALG data
+  if (!packetUBXESFALG)    // Bail if the RAM allocation failed
     return (0);
 
   if (packetUBXESFALG->moduleQueried.moduleQueried.bits.yaw == false)
     getESFALG(maxWait);
   packetUBXESFALG->moduleQueried.moduleQueried.bits.yaw =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXESFALG->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXESFALG->data.yaw) / 100.0); // Convert to degrees
 }
 
 bool SFE_UBLOX_GNSS::getSensorFusionMeasurement(
     UBX_ESF_MEAS_sensorData_t *sensorData, uint8_t sensor, uint16_t maxWait) {
-  if(!packetUBXESFMEAS)
-    initPacketUBXESFMEAS(); // Check that RAM has been allocated for the ESF
-                            // MEAS data
-  if(!packetUBXESFMEAS) // Bail if the RAM allocation failed
+  if (!packetUBXESFMEAS)
+    initPacketUBXESFMEAS(); // Check that RAM has been allocated
+                            // for the ESF MEAS data
+  if (!packetUBXESFMEAS)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXESFMEAS->moduleQueried.moduleQueried.bits.data &
       ((1 << sensor) == 0))
     getESFMEAS(maxWait);
   packetUBXESFMEAS->moduleQueried.moduleQueried.bits.data &=
-      ~(1 << sensor); // Since we are about to give this to user, mark this data
-                      // as stale
+      ~(1 << sensor); // Since we are about to give this to
+                      // user, mark this data as stale
   packetUBXESFMEAS->moduleQueried.moduleQueried.bits.all = false;
   sensorData->data.all = packetUBXESFMEAS->data.data[sensor].data.all;
   return true;
@@ -11933,18 +12073,18 @@ bool SFE_UBLOX_GNSS::getSensorFusionMeasurement(
 
 bool SFE_UBLOX_GNSS::getRawSensorMeasurement(
     UBX_ESF_RAW_sensorData_t *sensorData, uint8_t sensor, uint16_t maxWait) {
-  if(!packetUBXESFRAW)
-    initPacketUBXESFRAW(); // Check that RAM has been allocated for the ESF RAW
-                           // data
-  if(!packetUBXESFRAW) // Bail if the RAM allocation failed
+  if (!packetUBXESFRAW)
+    initPacketUBXESFRAW(); // Check that RAM has been allocated
+                           // for the ESF RAW data
+  if (!packetUBXESFRAW)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXESFRAW->moduleQueried.moduleQueried.bits.data &
       ((1 << sensor) == 0))
     getESFRAW(maxWait);
   packetUBXESFRAW->moduleQueried.moduleQueried.bits.data &=
-      ~(1 << sensor); // Since we are about to give this to user, mark this data
-                      // as stale
+      ~(1 << sensor); // Since we are about to give this to
+                      // user, mark this data as stale
   packetUBXESFRAW->moduleQueried.moduleQueried.bits.all = false;
   sensorData->data.all = packetUBXESFRAW->data.data[sensor].data.all;
   sensorData->sTag = packetUBXESFRAW->data.data[sensor].sTag;
@@ -11962,18 +12102,19 @@ bool SFE_UBLOX_GNSS::getRawSensorMeasurement(
 bool SFE_UBLOX_GNSS::getSensorFusionStatus(
     UBX_ESF_STATUS_sensorStatus_t *sensorStatus, uint8_t sensor,
     uint16_t maxWait) {
-  if(!packetUBXESFSTATUS)
-    initPacketUBXESFSTATUS(); // Check that RAM has been allocated for the ESF
-                              // STATUS data
-  if(!packetUBXESFSTATUS) // Bail if the RAM allocation failed
+  if (!packetUBXESFSTATUS)
+    initPacketUBXESFSTATUS(); // Check that RAM has been
+                              // allocated for the ESF STATUS
+                              // data
+  if (!packetUBXESFSTATUS)    // Bail if the RAM allocation failed
     return false;
 
   if (packetUBXESFSTATUS->moduleQueried.moduleQueried.bits.status &
       ((1 << sensor) == 0))
     getESFSTATUS(maxWait);
   packetUBXESFSTATUS->moduleQueried.moduleQueried.bits.status &=
-      ~(1 << sensor); // Since we are about to give this to user, mark this data
-                      // as stale
+      ~(1 << sensor); // Since we are about to give this to
+                      // user, mark this data as stale
   packetUBXESFSTATUS->moduleQueried.moduleQueried.bits.all = false;
   sensorStatus->sensStatus1.all =
       packetUBXESFSTATUS->data.status[sensor].sensStatus1.all;
@@ -12000,25 +12141,26 @@ bool SFE_UBLOX_GNSS::getSensorFusionStatus(
 // Returns true if the setHNRNavigationRate is successful
 bool SFE_UBLOX_GNSS::setHNRNavigationRate(uint8_t rate, uint16_t maxWait) {
   if (rate > 40)
-    rate = 40; // Limit rate to 40Hz so i2cPollingWait is set correctly
+    rate = 40; // Limit rate to 40Hz so i2cPollingWait is set
+               // correctly
 
   // Adjust the I2C polling timeout based on update rate
   // Do this even if the sendCommand is not ACK'd
   i2cPollingWaitHNR =
-      1000 /
-      (((int)rate) *
-       4); // This is the number of ms to wait between checks for new I2C data
-  i2cPollingWait =
-      i2cPollingWaitNAV < i2cPollingWaitHNR
-          ? i2cPollingWaitNAV
-          : i2cPollingWaitHNR; // Set i2cPollingWait to the lower of NAV and HNR
+      1000 / (((int)rate) * 4); // This is the number of ms to wait
+                                // between checks for new I2C data
+  i2cPollingWait = i2cPollingWaitNAV < i2cPollingWaitHNR
+                       ? i2cPollingWaitNAV
+                       : i2cPollingWaitHNR; // Set i2cPollingWait to the
+                                            // lower of NAV and HNR
 
   packetCfg.cls = UBX_CLASS_CFG;
   packetCfg.id = UBX_CFG_HNR;
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // Ask module for the current HNR settings. Loads into payloadCfg.
+  // Ask module for the current HNR settings. Loads into
+  // payloadCfg.
   if (sendCommand(&packetCfg, maxWait) != SFE_UBLOX_STATUS_DATA_RECEIVED)
     return false;
 
@@ -12040,7 +12182,8 @@ uint8_t SFE_UBLOX_GNSS::getHNRNavigationRate(uint16_t maxWait) {
   packetCfg.len = 0;
   packetCfg.startingSpot = 0;
 
-  // Ask module for the current HNR settings. Loads into payloadCfg.
+  // Ask module for the current HNR settings. Loads into
+  // payloadCfg.
   if (sendCommand(&packetCfg, maxWait) != SFE_UBLOX_STATUS_DATA_RECEIVED)
     return (0);
 
@@ -12050,32 +12193,34 @@ uint8_t SFE_UBLOX_GNSS::getHNRNavigationRate(uint16_t maxWait) {
 
 float SFE_UBLOX_GNSS::getHNRroll(uint16_t maxWait) // Returned as degrees
 {
-  if(!packetUBXHNRATT)
-    initPacketUBXHNRATT(); // Check that RAM has been allocated for the HNR ATT
-                           // data
-  if(!packetUBXHNRATT) // Bail if the RAM allocation failed
+  if (!packetUBXHNRATT)
+    initPacketUBXHNRATT(); // Check that RAM has been allocated
+                           // for the HNR ATT data
+  if (!packetUBXHNRATT)    // Bail if the RAM allocation failed
     return (0);
 
   if (packetUBXHNRATT->moduleQueried.moduleQueried.bits.roll == false)
     getHNRATT(maxWait);
   packetUBXHNRATT->moduleQueried.moduleQueried.bits.roll =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXHNRATT->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXHNRATT->data.roll) / 100000.0); // Convert to degrees
 }
 
 float SFE_UBLOX_GNSS::getHNRpitch(uint16_t maxWait) // Returned as degrees
 {
-  if(!packetUBXHNRATT)
-    initPacketUBXHNRATT(); // Check that RAM has been allocated for the HNR ATT
-                           // data
-  if(!packetUBXHNRATT) // Bail if the RAM allocation failed
+  if (!packetUBXHNRATT)
+    initPacketUBXHNRATT(); // Check that RAM has been allocated
+                           // for the HNR ATT data
+  if (!packetUBXHNRATT)    // Bail if the RAM allocation failed
     return (0);
 
   if (packetUBXHNRATT->moduleQueried.moduleQueried.bits.pitch == false)
     getHNRATT(maxWait);
   packetUBXHNRATT->moduleQueried.moduleQueried.bits.pitch =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXHNRATT->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXHNRATT->data.pitch) /
           100000.0); // Convert to degrees
@@ -12083,26 +12228,28 @@ float SFE_UBLOX_GNSS::getHNRpitch(uint16_t maxWait) // Returned as degrees
 
 float SFE_UBLOX_GNSS::getHNRheading(uint16_t maxWait) // Returned as degrees
 {
-  if(!packetUBXHNRATT)
-    initPacketUBXHNRATT(); // Check that RAM has been allocated for the HNR ATT
-                           // data
-  if(!packetUBXHNRATT) // Bail if the RAM allocation failed
+  if (!packetUBXHNRATT)
+    initPacketUBXHNRATT(); // Check that RAM has been allocated
+                           // for the HNR ATT data
+  if (!packetUBXHNRATT)    // Bail if the RAM allocation failed
     return (0);
 
   if (packetUBXHNRATT->moduleQueried.moduleQueried.bits.heading == false)
     getHNRATT(maxWait);
   packetUBXHNRATT->moduleQueried.moduleQueried.bits.heading =
-      false; // Since we are about to give this to user, mark this data as stale
+      false; // Since we are about to give this to user, mark
+             // this data as stale
   packetUBXHNRATT->moduleQueried.moduleQueried.bits.all = false;
   return (((float)packetUBXHNRATT->data.heading) /
           100000.0); // Convert to degrees
 }
 
-// Functions to extract signed and unsigned 8/16/32-bit data from a ubxPacket
-// From v2.0: These are public. The user can call these to extract data from
-// custom packets
+// Functions to extract signed and unsigned 8/16/32-bit data
+// from a ubxPacket From v2.0: These are public. The user can
+// call these to extract data from custom packets
 
-// Given a spot in the payload array, extract four bytes and build a long
+// Given a spot in the payload array, extract four bytes and
+// build a long
 uint32_t SFE_UBLOX_GNSS::extractLong(ubxPacket *msg, uint8_t spotToStart) {
   uint32_t val = 0;
   val |= (uint32_t)msg->payload[spotToStart + 0] << 8 * 0;
@@ -12112,8 +12259,8 @@ uint32_t SFE_UBLOX_GNSS::extractLong(ubxPacket *msg, uint8_t spotToStart) {
   return (val);
 }
 
-// Just so there is no ambiguity about whether a uint32_t will cast to a int32_t
-// correctly...
+// Just so there is no ambiguity about whether a uint32_t will
+// cast to a int32_t correctly...
 int32_t SFE_UBLOX_GNSS::extractSignedLong(ubxPacket *msg, uint8_t spotToStart) {
   union // Use a union to convert from uint32_t to int32_t
   {
@@ -12125,7 +12272,8 @@ int32_t SFE_UBLOX_GNSS::extractSignedLong(ubxPacket *msg, uint8_t spotToStart) {
   return (unsignedSigned.signedLong);
 }
 
-// Given a spot in the payload array, extract two bytes and build an int
+// Given a spot in the payload array, extract two bytes and
+// build an int
 uint16_t SFE_UBLOX_GNSS::extractInt(ubxPacket *msg, uint8_t spotToStart) {
   uint16_t val = 0;
   val |= (uint16_t)msg->payload[spotToStart + 0] << 8 * 0;
@@ -12133,8 +12281,8 @@ uint16_t SFE_UBLOX_GNSS::extractInt(ubxPacket *msg, uint8_t spotToStart) {
   return (val);
 }
 
-// Just so there is no ambiguity about whether a uint16_t will cast to a int16_t
-// correctly...
+// Just so there is no ambiguity about whether a uint16_t will
+// cast to a int16_t correctly...
 int16_t SFE_UBLOX_GNSS::extractSignedInt(ubxPacket *msg, int8_t spotToStart) {
   union // Use a union to convert from uint16_t to int16_t
   {
